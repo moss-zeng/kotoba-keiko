@@ -9,7 +9,7 @@
       "binding": "DB", // 代码里用 env.DB 访问数据库
       "database_name": "kotoba-keiko",
       // 部署时填你 dashboard 里的 Database ID；本地开发用 --local 不需要真实 ID
-      "database_id": "REPLACE_WITH_YOUR_DATABASE_ID"
+      "database_id": "808f43d0-f44b-42dd-a903-39b338fbf5c8"
     }
   ]
 }
