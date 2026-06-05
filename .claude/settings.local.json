@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npx wrangler pages dev ./public --port 8788)"
+    ]
+  }
+}

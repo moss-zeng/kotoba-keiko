@@ -1,0 +1,15 @@
+{
+  // Cloudflare Pages + D1 配置
+  "name": "kotoba-keiko",
+  "compatibility_date": "2024-09-23",
+  // Vite 构建产物目录（部署时 Cloudflare 发布这个目录）
+  "pages_build_output_dir": "dist",
+  "d1_databases": [
+    {
+      "binding": "DB", // 代码里用 env.DB 访问数据库
+      "database_name": "kotoba-keiko",
+      // 部署时填你 dashboard 里的 Database ID；本地开发用 --local 不需要真实 ID
+      "database_id": "REPLACE_WITH_YOUR_DATABASE_ID"
+    }
+  ]
+}

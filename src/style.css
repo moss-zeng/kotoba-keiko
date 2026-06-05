@@ -1,0 +1,122 @@
+:root {
+  --bg: #fafafa;
+  --card: #ffffff;
+  --text: #1a1a1a;
+  --muted: #8a8a8a;
+  --accent: #4f46e5;
+  --accent-light: #eef2ff;
+  --border: #e7e7e7;
+  --danger: #dc2626;
+  --ok: #16a34a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Kaku Gothic ProN',
+    'Hiragino Sans', 'Yu Gothic', Meiryo, 'PingFang SC', 'Microsoft YaHei',
+    sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding: 24px 20px 48px;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 12px;
+  padding: 14px 20px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  transition: opacity 0.15s;
+}
+button:active {
+  opacity: 0.7;
+}
+button.secondary {
+  background: var(--accent-light);
+  color: var(--accent);
+}
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+input,
+textarea {
+  font: inherit;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--text);
+  outline: none;
+  resize: vertical;
+}
+input:focus,
+textarea:focus {
+  border-color: var(--accent);
+}
+
+.title {
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.subtitle {
+  color: var(--muted);
+  margin-bottom: 24px;
+}
+.card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+}
+.field {
+  margin-bottom: 16px;
+}
+.field label {
+  display: block;
+  font-size: 14px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.row {
+  display: flex;
+  gap: 12px;
+}
+.stack > * + * {
+  margin-top: 12px;
+}
+.stack > button {
+  width: 100%;
+}
+.center {
+  text-align: center;
+}
+.msg-ok {
+  color: var(--ok);
+}
+.msg-err {
+  color: var(--danger);
+}
