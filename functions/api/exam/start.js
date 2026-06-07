@@ -28,7 +28,8 @@ export async function onRequestGet({ env }) {
   }
   for (const o of ono.results) {
     const { parts, answers } = parseOno(o.body)
-    questions.push({ type: 'ono', id: o.id, parts, choices: shuffle(answers) })
+    // 候选词去重：同一个词在段落里多次出现时只给一个（可重复填入多个空）
+    questions.push({ type: 'ono', id: o.id, parts, choices: shuffle([...new Set(answers)]) })
   }
 
   return Response.json({ resumed: false, questions: shuffle(questions) })

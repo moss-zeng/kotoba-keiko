@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { parseMeaning } from '../meaning.js'
 
 const router = useRouter()
 const tab = ref('kanji') // 'kanji' | 'ono'
@@ -8,7 +9,7 @@ const tab = ref('kanji') // 'kanji' | 'ono'
 // 表记表单
 const hyoki = ref('')
 const kana = ref('')
-const meaning = ref('')
+const meanings = ref([{ t: '', b: false }])
 const editingKanjiId = ref(null)
 
 // 拟态表单
@@ -45,14 +46,32 @@ function flash(text, type) {
 }
 
 // ---------- 表记 ----------
+function addMeaning() {
+  meanings.value.push({ t: '', b: false })
+}
+function removeMeaning(i) {
+  meanings.value.splice(i, 1)
+  if (meanings.value.length === 0) meanings.value.push({ t: '', b: false })
+}
 function resetKanjiForm() {
   hyoki.value = ''
   kana.value = ''
-  meaning.value = ''
+  meanings.value = [{ t: '', b: false }]
   editingKanjiId.value = null
 }
 async function saveKanji() {
-  const payload = { hyoki: hyoki.value, kana: kana.value, meaning: meaning.value }
+  const ms = meanings.value
+    .map((m) => ({ t: m.t.trim(), b: !!m.b }))
+    .filter((m) => m.t)
+  if (!hyoki.value.trim() || !kana.value.trim() || ms.length === 0) {
+    flash('表记、假名、至少一条释义都不能为空', 'err')
+    return
+  }
+  const payload = {
+    hyoki: hyoki.value,
+    kana: kana.value,
+    meaning: JSON.stringify(ms),
+  }
   const editing = editingKanjiId.value
   const res = editing
     ? await fetch(`/api/kanji/${editing}`, {
@@ -70,14 +89,17 @@ async function saveKanji() {
     flash(data.error || '操作失败', 'err')
     return
   }
-  flash(editing ? '已保存修改' : '已添加：' + (data.hyoki || hyoki.value), 'ok')
+  flash(editing ? '已保存修改' : '已添加：' + hyoki.value, 'ok')
   resetKanjiForm()
   loadLists()
 }
 function editKanji(w) {
   hyoki.value = w.hyoki
   kana.value = w.kana
-  meaning.value = w.meaning
+  const ms = parseMeaning(w.meaning)
+  meanings.value = ms.length
+    ? ms.map((m) => ({ t: m.t, b: !!m.b }))
+    : [{ t: '', b: false }]
   editingKanjiId.value = w.id
   window.scrollTo(0, 0)
 }
@@ -173,8 +195,34 @@ async function delOno(o) {
           <input v-model="kana" placeholder="べんきょう" />
         </div>
         <div class="field">
-          <label>日文释义（别写进该词读音，避免泄露答案）</label>
-          <input v-model="meaning" placeholder="勉学にはげむこと" />
+          <label>日文释义（可多条，「粗」标加粗主要释义）</label>
+          <div
+            v-for="(m, mi) in meanings"
+            :key="mi"
+            class="row"
+            style="margin-bottom: 8px; align-items: center"
+          >
+            <input v-model="m.t" placeholder="勉学にはげむこと" style="flex: 1" />
+            <button
+              class="ghost"
+              :style="m.b ? 'color:var(--accent);font-weight:700' : ''"
+              style="padding: 8px 12px"
+              @click="m.b = !m.b"
+            >
+              粗
+            </button>
+            <button
+              v-if="meanings.length > 1"
+              class="ghost"
+              style="padding: 8px 10px"
+              @click="removeMeaning(mi)"
+            >
+              ×
+            </button>
+          </div>
+          <button class="secondary" style="width: 100%; padding: 8px" @click="addMeaning">
+            + 添加释义
+          </button>
         </div>
         <div class="row">
           <button style="flex: 1" @click="saveKanji">
@@ -186,7 +234,16 @@ async function delOno(o) {
       <p class="subtitle">已录入 {{ kanjiList.length }} 个表记词</p>
       <div v-for="w in kanjiList" :key="w.id" class="card">
         <div>
-          <strong>{{ w.hyoki }}</strong> — {{ w.kana }} — {{ w.meaning }}
+          <strong>{{ w.hyoki }}</strong> — {{ w.kana }} —
+          <template v-for="(m, mi) in parseMeaning(w.meaning)" :key="mi"
+            ><span :style="m.b ? 'font-weight:700' : ''">{{ m.t }}</span
+            ><span
+              v-if="mi < parseMeaning(w.meaning).length - 1"
+              style="color: var(--muted)"
+            >
+              / </span
+            ></template
+          >
           <span style="color: var(--muted); font-size: 14px"> · {{ w.score }} 分</span>
         </div>
         <div class="row" style="margin-top: 10px">

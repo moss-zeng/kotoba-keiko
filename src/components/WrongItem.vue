@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { parseMeaning } from '../meaning.js'
 
 // item: { type, hyoki, parts, correctAnswer, yourAnswer }
 //  - kanji: correctAnswer/yourAnswer 为字符串
@@ -63,7 +64,15 @@ const kanjiCmp = computed(() => {
           </template>
         </template>
       </span>
-      <div v-if="showMeaning" class="meaning">{{ item.meaning }}</div>
+      <div v-if="showMeaning" class="meaning">
+        <div
+          v-for="(m, mi) in parseMeaning(item.meaning)"
+          :key="mi"
+          :style="m.b ? 'font-weight:700' : ''"
+        >
+          {{ m.t }}
+        </div>
+      </div>
     </template>
 
     <!-- 拟态题 -->

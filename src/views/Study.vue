@@ -2,22 +2,22 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import WrongItem from '../components/WrongItem.vue'
+import { parseMeaning } from '../meaning.js'
 
 const router = useRouter()
 
 const phase = ref('loading') // loading | answering | empty | finished
 const questions = ref([])
 const index = ref(0)
-const answered = ref([]) // 本局每题结果（含错题展示所需信息）
+const answered = ref([])
 const showExit = ref(false)
 
 // 作答状态
 const kanjiInput = ref('')
 const showMeaning = ref(false)
-const filled = ref([]) // 每空 -> choice index | null
-const usedChoice = ref([]) // choice index -> 是否已用
+const filled = ref([]) // 每空 -> choice index | null（候选去重，可重复填）
 const selectedBlank = ref(null)
-const result = ref(null) // 当前题结果 { correct, correctAnswer } | null
+const result = ref(null)
 
 const current = computed(() => questions.value[index.value] || null)
 const total = computed(() => questions.value.length)
@@ -32,9 +32,9 @@ onMounted(async () => {
     }
     questions.value = data.questions
     answered.value = data.answered ?? []
-    index.value = answered.value.length // 恢复：从已答数接着考
+    index.value = answered.value.length
     if (index.value >= questions.value.length) {
-      await finishExam() // 暂存的局其实已答完，直接结算
+      await finishExam()
       return
     }
     phase.value = 'answering'
@@ -52,30 +52,22 @@ function initQuestion() {
   const q = current.value
   if (q && q.type === 'ono') {
     filled.value = q.parts.filter((p) => p.t === 'blank').map(() => null)
-    usedChoice.value = q.choices.map(() => false)
   }
 }
 
-// 拟态交互
 function pickBlank(i) {
   if (result.value) return
   selectedBlank.value = i
 }
+// 候选词可重复填入多个空（候选已去重）
 function pickChoice(j) {
-  if (result.value || usedChoice.value[j] || selectedBlank.value === null) return
-  const prev = filled.value[selectedBlank.value]
-  if (prev !== null) usedChoice.value[prev] = false
+  if (result.value || selectedBlank.value === null) return
   filled.value[selectedBlank.value] = j
-  usedChoice.value[j] = true
   selectedBlank.value = null
 }
 function clearBlank(i) {
   if (result.value) return
-  const j = filled.value[i]
-  if (j !== null) {
-    usedChoice.value[j] = false
-    filled.value[i] = null
-  }
+  filled.value[i] = null
   selectedBlank.value = i
 }
 
@@ -121,7 +113,7 @@ function next() {
   initQuestion()
 }
 
-// 结算：按本局已答结果批量算分 + 清暂存
+// 结算：批量算分 + 写历史 + 清暂存
 async function finishExam() {
   await fetch('/api/exam/settle', {
     method: 'POST',
@@ -132,20 +124,15 @@ async function finishExam() {
   phase.value = 'finished'
 }
 
-// 退出：暂存
 async function exitSave() {
   await fetch('/api/exam/save', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      questions: questions.value,
-      answered: answered.value,
-    }),
+    body: JSON.stringify({ questions: questions.value, answered: answered.value }),
   })
   router.push('/')
 }
 
-// 退出：作废
 async function exitDiscard() {
   await fetch('/api/exam/discard', { method: 'POST' })
   router.push('/')
@@ -189,9 +176,16 @@ async function exitDiscard() {
         >
           {{ current.hyoki }}
         </div>
-        <p v-if="showMeaning" class="subtitle" style="margin-bottom: 12px">
-          {{ current.meaning }}
-        </p>
+        <div v-if="showMeaning" style="margin-bottom: 12px">
+          <p
+            v-for="(m, mi) in parseMeaning(current.meaning)"
+            :key="mi"
+            class="subtitle"
+            :style="m.b ? 'font-weight:700;color:var(--text);margin:2px 0' : 'margin:2px 0'"
+          >
+            {{ m.t }}
+          </p>
+        </div>
         <p v-else class="subtitle" style="font-size: 13px; margin-bottom: 12px">
           点汉字看释义
         </p>
@@ -222,7 +216,7 @@ async function exitDiscard() {
             v-for="(c, j) in current.choices"
             :key="j"
             class="secondary"
-            :disabled="usedChoice[j] || !!result"
+            :disabled="!!result"
             style="padding: 8px 14px"
             @click="pickChoice(j)"
           >
