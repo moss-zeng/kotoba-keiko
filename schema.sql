@@ -32,3 +32,17 @@ CREATE TABLE IF NOT EXISTS active_exam (
   answers    TEXT NOT NULL,              -- 已答情况与累计得分（JSON）
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ========== 语法笔记原文（单行 id=1，整篇 mdx）==========
+CREATE TABLE IF NOT EXISTS grammar_doc (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),
+  text       TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ========== 语法义项的学习标记（按 标题+词性+意思 的锚点存）==========
+CREATE TABLE IF NOT EXISTS grammar_state (
+  k         TEXT PRIMARY KEY,  -- 锚点 key
+  state     TEXT NOT NULL,     -- 'seen'(已看) / 'key'(重点) / 'known'(熟悉)；未看(new)不存
+  collapsed INTEGER NOT NULL DEFAULT 0  -- 1=收起例句（持久）
+);
