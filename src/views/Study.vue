@@ -205,7 +205,7 @@ async function exitDiscard() {
 
       <!-- 拟态题 -->
       <div v-else class="card">
-        <p style="font-size: 16px; line-height: 2.2">
+        <p style="font-size: 16px; line-height: 2.2; white-space: pre-wrap">
           <template v-for="(p, pi) in current.parts" :key="pi">
             <span v-if="p.t === 'text'">{{ p.v }}</span>
             <span

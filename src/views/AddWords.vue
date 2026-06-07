@@ -221,7 +221,7 @@ async function delOno(o) {
       </div>
       <p class="subtitle">已录入 {{ onoList.length }} 段</p>
       <div v-for="o in onoList" :key="o.id" class="card">
-        <div style="font-size: 15px; line-height: 1.7">{{ o.body }}</div>
+        <div style="font-size: 15px; line-height: 1.7; white-space: pre-wrap">{{ o.body }}</div>
         <div style="color: var(--muted); font-size: 14px; margin-top: 4px">
           {{ o.score }} 分
         </div>

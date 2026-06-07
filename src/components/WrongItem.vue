@@ -97,6 +97,7 @@ const kanjiCmp = computed(() => {
 .ono {
   font-size: 16px;
   line-height: 2.2;
+  white-space: pre-wrap;
 }
 .ok {
   color: var(--ok);
