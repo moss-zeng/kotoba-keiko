@@ -16,10 +16,10 @@ export async function onRequestGet({ env }) {
 
   // 2) 否则抽新题
   const kanji = await env.DB.prepare(
-    'SELECT id, hyoki, meaning FROM kanji_words WHERE score < 3 ORDER BY RANDOM() LIMIT 30'
+    'SELECT id, hyoki, meaning FROM kanji_words WHERE score < 3 ORDER BY RANDOM() LIMIT 25'
   ).all()
   const ono = await env.DB.prepare(
-    'SELECT id, body FROM onomatopoeia WHERE score < 3 ORDER BY RANDOM() LIMIT 10'
+    'SELECT id, body FROM onomatopoeia WHERE score < 3 ORDER BY RANDOM() LIMIT 5'
   ).all()
 
   const questions = []
