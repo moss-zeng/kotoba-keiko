@@ -134,11 +134,11 @@ async function copyOno() {
   const original = q.parts.map((p) => (p.t === 'text' ? p.v : '＿＿')).join('')
   let text = original
   if (result.value) {
-    const correct = (result.value.correctAnswer || []).join('、')
+    const correct = '正确答案：' + (result.value.correctAnswer || []).join('、')
     if (result.value.correct) {
       text += '\n\n' + correct
     } else {
-      const mine = filled.value.map((j) => q.choices[j]).join('、')
+      const mine = '我的答案：' + filled.value.map((j) => q.choices[j]).join('、')
       text += '\n\n' + mine + '\n' + correct
     }
   }
