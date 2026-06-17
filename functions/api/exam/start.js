@@ -1,4 +1,4 @@
-// GET /api/exam/start —— 有暂存的局则恢复，否则抽 30 表记 + 10 拟态混合打乱
+// GET /api/exam/start —— 有暂存的局则恢复，否则抽常规题(score<3) + 到期复习题(score=3 且满15天)
 import { parseOno, shuffle } from './_shared.js'
 
 export async function onRequestGet({ env }) {
@@ -14,7 +14,7 @@ export async function onRequestGet({ env }) {
     })
   }
 
-  // 2) 否则抽新题
+  // 2) 常规题：score < 3，随机抽 25 表记 + 5 拟态
   const kanji = await env.DB.prepare(
     'SELECT id, hyoki, meaning FROM kanji_words WHERE score < 3 ORDER BY RANDOM() LIMIT 25'
   ).all()
@@ -22,15 +22,39 @@ export async function onRequestGet({ env }) {
     'SELECT id, body FROM onomatopoeia WHERE score < 3 ORDER BY RANDOM() LIMIT 5'
   ).all()
 
-  const questions = []
+  // 3) 复习题：score = 3 且距到达 3 分已满 15 天（额外，不占常规名额）
+  const dueKanji = await env.DB.prepare(
+    "SELECT id, hyoki, meaning FROM kanji_words WHERE score = 3 AND graduated_at IS NOT NULL AND datetime(graduated_at, '+15 days') <= datetime('now')"
+  ).all()
+  const dueOno = await env.DB.prepare(
+    "SELECT id, body FROM onomatopoeia WHERE score = 3 AND graduated_at IS NOT NULL AND datetime(graduated_at, '+15 days') <= datetime('now')"
+  ).all()
+
+  const regular = []
   for (const k of kanji.results) {
-    questions.push({ type: 'kanji', id: k.id, hyoki: k.hyoki, meaning: k.meaning })
+    regular.push({ type: 'kanji', id: k.id, hyoki: k.hyoki, meaning: k.meaning })
   }
   for (const o of ono.results) {
     const { parts, answers } = parseOno(o.body)
-    // 候选词去重：同一个词在段落里多次出现时只给一个（可重复填入多个空）
-    questions.push({ type: 'ono', id: o.id, parts, choices: shuffle([...new Set(answers)]) })
+    regular.push({ type: 'ono', id: o.id, parts, choices: shuffle([...new Set(answers)]) })
   }
 
-  return Response.json({ resumed: false, questions: shuffle(questions) })
+  const review = []
+  for (const k of dueKanji.results) {
+    review.push({ type: 'kanji', id: k.id, hyoki: k.hyoki, meaning: k.meaning, review: true })
+  }
+  for (const o of dueOno.results) {
+    const { parts, answers } = parseOno(o.body)
+    review.push({
+      type: 'ono',
+      id: o.id,
+      parts,
+      choices: shuffle([...new Set(answers)]),
+      review: true,
+    })
+  }
+
+  // 常规打乱在前，复习题接在后面
+  const questions = [...shuffle(regular), ...shuffle(review)]
+  return Response.json({ resumed: false, questions })
 }

@@ -1,11 +1,10 @@
-// POST /api/exam/settle —— 结算：批量算分 + 写入考试历史(错题本) + 清空暂存
-// 入参：{ answered: [{type,id,correct, hyoki,meaning,parts,correctAnswer,yourAnswer}] }
+// POST /api/exam/settle —— 结算：批量算分(含 3→4 升级) + 写历史 + 清暂存
+// 入参：{ answered: [{type,id,review,correct, ...}] }
 export async function onRequestPost({ request, env }) {
   const data = await request.json().catch(() => null)
   if (!data || !Array.isArray(data.answered)) return jsonError('参数错误', 400)
   const answered = data.answered
 
-  // 1) 批量算分
   const stmts = []
   for (const a of answered) {
     const table =
@@ -15,16 +14,34 @@ export async function onRequestPost({ request, env }) {
           ? 'onomatopoeia'
           : null
     if (!table) continue
-    const delta = a.correct ? 1 : -1
-    stmts.push(
-      env.DB.prepare(
-        `UPDATE ${table} SET score = score + ? WHERE id = ?`
-      ).bind(delta, a.id)
-    )
+
+    if (a.review) {
+      if (a.correct) {
+        // 复习答对 → 4 分，永久不再出现
+        stmts.push(env.DB.prepare(`UPDATE ${table} SET score = 4 WHERE id = ?`).bind(a.id))
+      } else {
+        // 复习答错 → 退回 2 分、清毕业时间，变回普通词重新爬
+        stmts.push(
+          env.DB.prepare(
+            `UPDATE ${table} SET score = 2, graduated_at = NULL WHERE id = ?`
+          ).bind(a.id)
+        )
+      }
+    } else if (a.correct) {
+      // 常规答对 +1；若刚升到 3 分，记下毕业时间(用于 15 天后复习)
+      stmts.push(
+        env.DB.prepare(
+          `UPDATE ${table} SET score = score + 1, graduated_at = CASE WHEN score + 1 >= 3 THEN datetime('now') ELSE graduated_at END WHERE id = ?`
+        ).bind(a.id)
+      )
+    } else {
+      // 常规答错 −1
+      stmts.push(env.DB.prepare(`UPDATE ${table} SET score = score - 1 WHERE id = ?`).bind(a.id))
+    }
   }
   if (stmts.length) await env.DB.batch(stmts)
 
-  // 2) 写考试历史（仅在有已答题时；错题全量存入 wrong_items）
+  // 写考试历史（错题全量存入 wrong_items）
   if (answered.length > 0) {
     const correct = answered.filter((a) => a.correct).length
     const wrong = answered.filter((a) => !a.correct)
@@ -35,7 +52,6 @@ export async function onRequestPost({ request, env }) {
       .run()
   }
 
-  // 3) 清空暂存
   await env.DB.prepare('DELETE FROM active_exam WHERE id = 1').run()
   return Response.json({ ok: true })
 }

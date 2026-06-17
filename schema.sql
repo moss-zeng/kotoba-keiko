@@ -4,16 +4,18 @@ CREATE TABLE IF NOT EXISTS kanji_words (
   hyoki      TEXT    NOT NULL,            -- 表记（汉字写法），如「勉強」
   kana       TEXT    NOT NULL,            -- 假名读音（标准答案），如「べんきょう」
   meaning    TEXT    NOT NULL,            -- 日文释义（勿写入该词读音以免泄露答案），如「勉学にはげむこと」
-  score      INTEGER NOT NULL DEFAULT 0,  -- 当前分数，>=3 视为毕业、不再抽
-  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  score        INTEGER NOT NULL DEFAULT 0,  -- 0-2 常规；3=待复习；4=永久毕业
+  graduated_at TEXT,                          -- 升到 3 分的时间(UTC)，满 15 天进复习；null=未到过 3 分
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ========== 拟态词段落（题型B：完形填空配对）==========
 CREATE TABLE IF NOT EXISTS onomatopoeia (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   body       TEXT    NOT NULL,            -- 带 **标记** 的整段原文
-  score      INTEGER NOT NULL DEFAULT 0,  -- 当前分数，>=3 视为毕业、不再抽
-  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+  score        INTEGER NOT NULL DEFAULT 0,  -- 0-2 常规；3=待复习；4=永久毕业
+  graduated_at TEXT,                          -- 升到 3 分的时间(UTC)，满 15 天进复习；null=未到过 3 分
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ========== 考试记录（错题本，全部保存）==========

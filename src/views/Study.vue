@@ -112,6 +112,7 @@ async function submit() {
     answered.value.push({
       type: q.type,
       id: q.id,
+      review: q.review,
       correct: res.correct,
       hyoki: q.hyoki,
       meaning: q.meaning,
@@ -213,7 +214,14 @@ async function exitDiscard() {
       <div
         style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px"
       >
-        <span class="subtitle">{{ index + 1 }} / {{ total }}</span>
+        <span class="subtitle"
+          >{{ index + 1 }} / {{ total
+          }}<span
+            v-if="current.review"
+            style="color: var(--accent); margin-left: 8px; font-weight: 600"
+            >复习</span
+          ></span
+        >
         <button
           v-if="current.type === 'ono'"
           class="ghost"
