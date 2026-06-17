@@ -4,10 +4,30 @@ import { useRouter } from 'vue-router'
 
 const router = useRouter()
 const rows = ref([])
-const selectedRowIndex = ref(null)
+const selectedKana = ref(null)
 const expanded = ref(new Set()) // 展开的语法点（按 title）
 const revealed = ref(new Set()) // 已点开（去模糊）的义项 key
 const showKnown = ref(false)
+
+// 五十音图（含浊音/半浊音行；null=该位置无假名，仅占位对齐）
+const GOJUON = [
+  ['あ', 'い', 'う', 'え', 'お'],
+  ['か', 'き', 'く', 'け', 'こ'],
+  ['が', 'ぎ', 'ぐ', 'げ', 'ご'],
+  ['さ', 'し', 'す', 'せ', 'そ'],
+  ['ざ', 'じ', 'ず', 'ぜ', 'ぞ'],
+  ['た', 'ち', 'つ', 'て', 'と'],
+  ['だ', 'ぢ', 'づ', 'で', 'ど'],
+  ['な', 'に', 'ぬ', 'ね', 'の'],
+  ['は', 'ひ', 'ふ', 'へ', 'ほ'],
+  ['ば', 'び', 'ぶ', 'べ', 'ぼ'],
+  ['ぱ', 'ぴ', 'ぷ', 'ぺ', 'ぽ'],
+  ['ま', 'み', 'む', 'め', 'も'],
+  ['や', null, 'ゆ', null, 'よ'],
+  ['ら', 'り', 'る', 'れ', 'ろ'],
+  ['わ', null, null, null, 'を'],
+  ['ん', null, null, null, null],
+]
 
 onMounted(async () => {
   try {
@@ -18,8 +38,15 @@ onMounted(async () => {
   }
 })
 
+// 假名 → 该行数据（用于判断按钮亮/暗，以及选中进入）
+const rowMap = computed(() => {
+  const m = {}
+  for (const r of rows.value) m[r.row] = r
+  return m
+})
+
 const currentRow = computed(() =>
-  selectedRowIndex.value === null ? null : rows.value[selectedRowIndex.value]
+  selectedKana.value ? rowMap.value[selectedKana.value] : null
 )
 
 const stat = computed(() => {
@@ -43,13 +70,14 @@ const stat = computed(() => {
   return { points, items: n + s + k + kn, n, s, k, kn }
 })
 
-function openRow(i) {
-  selectedRowIndex.value = i
+function openRow(kana) {
+  if (!rowMap.value[kana]) return // 没收录的暗按钮不可进入
+  selectedKana.value = kana
   expanded.value = new Set()
   revealed.value = new Set()
 }
 function backToRows() {
-  selectedRowIndex.value = null
+  selectedKana.value = null
 }
 
 function togglePoint(p) {
@@ -92,7 +120,7 @@ function toggleCollapse(it) {
 
 <template>
   <div>
-    <!-- 五十音行列表 -->
+    <!-- 五十音网格 -->
     <template v-if="!currentRow">
       <button class="ghost" style="padding-left: 0" @click="router.push('/')">
         ← 返回
@@ -101,15 +129,21 @@ function toggleCollapse(it) {
       <p v-if="!rows.length" class="subtitle">
         还没有语法笔记，去「录入语法」粘贴整篇笔记。
       </p>
-      <div class="rows">
-        <button
-          v-for="(r, i) in rows"
-          :key="i"
-          class="secondary rowbtn"
-          @click="openRow(i)"
-        >
-          {{ r.row || '（未分组）' }}
-        </button>
+      <div class="gojuon">
+        <div v-for="(rowArr, ri) in GOJUON" :key="ri" class="gjrow">
+          <template v-for="(kana, ci) in rowArr" :key="ci">
+            <button
+              v-if="kana"
+              class="gjcell"
+              :class="rowMap[kana] ? 'active' : 'dim'"
+              :disabled="!rowMap[kana]"
+              @click="openRow(kana)"
+            >
+              {{ kana }}
+            </button>
+            <span v-else class="gjcell gjempty"></span>
+          </template>
+        </div>
       </div>
     </template>
 
@@ -181,14 +215,42 @@ function toggleCollapse(it) {
 </template>
 
 <style scoped>
-.rows {
+.gojuon {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
 }
-.rowbtn {
-  padding: 14px 20px;
-  min-width: 60px;
+.gjrow {
+  display: flex;
+  gap: 8px;
+}
+.gjcell {
+  flex: 1;
+  aspect-ratio: 1 / 1;
+  min-width: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.gjcell.active {
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+.gjcell.dim {
+  background: var(--card);
+  color: var(--border);
+  border: 1px solid var(--border);
+  cursor: default;
+}
+.gjempty {
+  background: transparent;
+  border: none;
+  pointer-events: none;
 }
 .show-known {
   display: flex;

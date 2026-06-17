@@ -185,8 +185,12 @@ async function exitDiscard() {
 
 <template>
   <div>
-    <button class="ghost" style="padding-left: 0" @click="showExit = true">
-      ← 退出
+    <button
+      class="ghost"
+      style="padding-left: 0"
+      @click="phase === 'answering' ? (showExit = true) : router.push('/')"
+    >
+      ← {{ phase === 'answering' ? '退出' : '返回' }}
     </button>
 
     <div v-if="phase === 'loading'" class="subtitle">加载中…</div>

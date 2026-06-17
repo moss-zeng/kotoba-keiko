@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { parseMeaning } from '../meaning.js'
 
@@ -22,6 +22,33 @@ const msgType = ref('')
 
 const kanjiList = ref([])
 const onoList = ref([])
+
+// 统计：复习(3 分) / 毕业(4 分)；正在学习(0-2)不单独统计
+const kanjiStat = computed(() => {
+  let review = 0
+  let done = 0
+  for (const w of kanjiList.value) {
+    if (w.score === 3) review++
+    else if (w.score >= 4) done++
+  }
+  return { review, done }
+})
+const onoStat = computed(() => {
+  let review = 0
+  let done = 0
+  for (const o of onoList.value) {
+    if (o.score === 3) review++
+    else if (o.score >= 4) done++
+  }
+  return { review, done }
+})
+
+function scoreStyle(score) {
+  return {
+    color: score >= 4 ? 'var(--ok)' : score < 0 ? 'var(--danger)' : 'var(--muted)',
+    fontSize: '14px',
+  }
+}
 
 async function loadLists() {
   try {
@@ -231,7 +258,10 @@ async function delOno(o) {
           <button v-if="editingKanjiId" class="ghost" @click="resetKanjiForm">取消</button>
         </div>
       </div>
-      <p class="subtitle">已录入 {{ kanjiList.length }} 个表记词</p>
+      <p class="subtitle">
+        已录入 {{ kanjiList.length }} 个表记词（复习 {{ kanjiStat.review }} · 毕业
+        {{ kanjiStat.done }}）
+      </p>
       <div v-for="w in kanjiList" :key="w.id" class="card">
         <div>
           <strong>{{ w.hyoki }}</strong> — {{ w.kana }} —
@@ -244,7 +274,7 @@ async function delOno(o) {
               / </span
             ></template
           >
-          <span style="color: var(--muted); font-size: 14px"> · {{ w.score }} 分</span>
+          <span :style="scoreStyle(w.score)"> · {{ w.score }} 分</span>
         </div>
         <div class="row" style="margin-top: 10px">
           <button class="secondary" style="flex: 1; padding: 8px" @click="editKanji(w)">
@@ -276,12 +306,12 @@ async function delOno(o) {
           <button v-if="editingOnoId" class="ghost" @click="resetOnoForm">取消</button>
         </div>
       </div>
-      <p class="subtitle">已录入 {{ onoList.length }} 段</p>
+      <p class="subtitle">
+        已录入 {{ onoList.length }} 段（复习 {{ onoStat.review }} · 毕业 {{ onoStat.done }}）
+      </p>
       <div v-for="o in onoList" :key="o.id" class="card">
         <div style="font-size: 15px; line-height: 1.7; white-space: pre-wrap">{{ o.body }}</div>
-        <div style="color: var(--muted); font-size: 14px; margin-top: 4px">
-          {{ o.score }} 分
-        </div>
+        <div :style="{ ...scoreStyle(o.score), marginTop: '4px' }">{{ o.score }} 分</div>
         <div class="row" style="margin-top: 10px">
           <button class="secondary" style="flex: 1; padding: 8px" @click="editOno(o)">
             编辑
