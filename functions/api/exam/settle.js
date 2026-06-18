@@ -7,6 +7,16 @@ export async function onRequestPost({ request, env }) {
 
   const stmts = []
   for (const a of answered) {
+    // 认读词：认识 +0.5 / 不认识 −1.5；升入 [3,4) 记时间(15 天后复习)，掉回 <3 清时间
+    if (a.type === 'reading') {
+      const c = a.correct ? 1 : 0
+      stmts.push(
+        env.DB.prepare(
+          `UPDATE reading_words SET score = score + (CASE WHEN ? THEN 0.5 ELSE -1.5 END), graduated_at = CASE WHEN ? AND (score + 0.5) >= 3 AND (score + 0.5) < 4 THEN datetime('now') WHEN ? = 0 AND (score - 1.5) < 3 THEN NULL ELSE graduated_at END WHERE id = ?`
+        ).bind(c, c, c, a.id)
+      )
+      continue
+    }
     const table =
       a.type === 'kanji'
         ? 'kanji_words'

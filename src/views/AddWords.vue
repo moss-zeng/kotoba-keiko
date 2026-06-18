@@ -4,13 +4,19 @@ import { useRouter } from 'vue-router'
 import { parseMeaning } from '../meaning.js'
 
 const router = useRouter()
-const tab = ref('kanji') // 'kanji' | 'ono'
+const tab = ref('kanji') // 'kanji' | 'reading' | 'ono'
 
 // 表记表单
 const hyoki = ref('')
 const kana = ref('')
 const meanings = ref([{ t: '', b: false }])
 const editingKanjiId = ref(null)
+
+// 认读表单
+const rkana = ref('')
+const rkanji = ref('')
+const rmeanings = ref([{ cn: '', sentence: '', note: '' }])
+const editingReadingId = ref(null)
 
 // 拟态表单
 const body = ref('')
@@ -21,27 +27,22 @@ const msg = ref('')
 const msgType = ref('')
 
 const kanjiList = ref([])
+const readingList = ref([])
 const onoList = ref([])
 
-// 统计：复习(3 分) / 毕业(4 分)；正在学习(0-2)不单独统计
-const kanjiStat = computed(() => {
+// 复习(3≤score<4) / 毕业(≥4)
+function statOf(list) {
   let review = 0
   let done = 0
-  for (const w of kanjiList.value) {
-    if (w.score === 3) review++
-    else if (w.score >= 4) done++
+  for (const w of list) {
+    if (w.score >= 4) done++
+    else if (w.score >= 3) review++
   }
   return { review, done }
-})
-const onoStat = computed(() => {
-  let review = 0
-  let done = 0
-  for (const o of onoList.value) {
-    if (o.score === 3) review++
-    else if (o.score >= 4) done++
-  }
-  return { review, done }
-})
+}
+const kanjiStat = computed(() => statOf(kanjiList.value))
+const readingStat = computed(() => statOf(readingList.value))
+const onoStat = computed(() => statOf(onoList.value))
 
 function scoreStyle(score) {
   return {
@@ -50,13 +51,26 @@ function scoreStyle(score) {
   }
 }
 
+function readingMeaningSummary(raw) {
+  try {
+    return JSON.parse(raw || '[]')
+      .map((m) => m.cn)
+      .filter(Boolean)
+      .join(' / ')
+  } catch (e) {
+    return ''
+  }
+}
+
 async function loadLists() {
   try {
-    const [k, o] = await Promise.all([
-      fetch('/api/kanji').then((r) => r.json()),
-      fetch('/api/onomatopoeia').then((r) => r.json()),
+    const [k, r, o] = await Promise.all([
+      fetch('/api/kanji').then((x) => x.json()),
+      fetch('/api/reading').then((x) => x.json()),
+      fetch('/api/onomatopoeia').then((x) => x.json()),
     ])
     kanjiList.value = Array.isArray(k) ? k : []
+    readingList.value = Array.isArray(r) ? r : []
     onoList.value = Array.isArray(o) ? o : []
   } catch (e) {
     flash('读取词库失败，检查本地服务是否在跑', 'err')
@@ -87,30 +101,16 @@ function resetKanjiForm() {
   editingKanjiId.value = null
 }
 async function saveKanji() {
-  const ms = meanings.value
-    .map((m) => ({ t: m.t.trim(), b: !!m.b }))
-    .filter((m) => m.t)
+  const ms = meanings.value.map((m) => ({ t: m.t.trim(), b: !!m.b })).filter((m) => m.t)
   if (!hyoki.value.trim() || !kana.value.trim() || ms.length === 0) {
     flash('表记、假名、至少一条释义都不能为空', 'err')
     return
   }
-  const payload = {
-    hyoki: hyoki.value,
-    kana: kana.value,
-    meaning: JSON.stringify(ms),
-  }
+  const payload = { hyoki: hyoki.value, kana: kana.value, meaning: JSON.stringify(ms) }
   const editing = editingKanjiId.value
   const res = editing
-    ? await fetch(`/api/kanji/${editing}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-    : await fetch('/api/kanji', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+    ? await fetch(`/api/kanji/${editing}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    : await fetch('/api/kanji', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   const data = await res.json()
   if (!res.ok) {
     flash(data.error || '操作失败', 'err')
@@ -124,9 +124,7 @@ function editKanji(w) {
   hyoki.value = w.hyoki
   kana.value = w.kana
   const ms = parseMeaning(w.meaning)
-  meanings.value = ms.length
-    ? ms.map((m) => ({ t: m.t, b: !!m.b }))
-    : [{ t: '', b: false }]
+  meanings.value = ms.length ? ms.map((m) => ({ t: m.t, b: !!m.b })) : [{ t: '', b: false }]
   editingKanjiId.value = w.id
   window.scrollTo(0, 0)
 }
@@ -140,6 +138,67 @@ async function delKanji(w) {
   }
 }
 
+// ---------- 认读 ----------
+function addRMeaning() {
+  rmeanings.value.push({ cn: '', sentence: '', note: '' })
+}
+function removeRMeaning(i) {
+  rmeanings.value.splice(i, 1)
+  if (rmeanings.value.length === 0) rmeanings.value.push({ cn: '', sentence: '', note: '' })
+}
+function resetReadingForm() {
+  rkana.value = ''
+  rkanji.value = ''
+  rmeanings.value = [{ cn: '', sentence: '', note: '' }]
+  editingReadingId.value = null
+}
+async function saveReading() {
+  const ms = rmeanings.value
+    .map((m) => ({ cn: m.cn.trim(), sentence: m.sentence.trim(), note: m.note.trim() }))
+    .filter((m) => m.cn)
+  if (!rkana.value.trim() || ms.length === 0) {
+    flash('假名、至少一条中文意思不能为空', 'err')
+    return
+  }
+  const payload = { kana: rkana.value, kanji: rkanji.value, meanings: ms }
+  const editing = editingReadingId.value
+  const res = editing
+    ? await fetch(`/api/reading/${editing}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    : await fetch('/api/reading', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  const data = await res.json()
+  if (!res.ok) {
+    flash(data.error || '操作失败', 'err')
+    return
+  }
+  flash(editing ? '已保存修改' : '已添加：' + rkana.value, 'ok')
+  resetReadingForm()
+  loadLists()
+}
+function editReading(w) {
+  rkana.value = w.kana
+  rkanji.value = w.kanji || ''
+  let ms = []
+  try {
+    ms = JSON.parse(w.meanings || '[]')
+  } catch (e) {
+    ms = []
+  }
+  rmeanings.value = ms.length
+    ? ms.map((m) => ({ cn: m.cn || '', sentence: m.sentence || '', note: m.note || '' }))
+    : [{ cn: '', sentence: '', note: '' }]
+  editingReadingId.value = w.id
+  window.scrollTo(0, 0)
+}
+async function delReading(w) {
+  if (!confirm(`删除「${w.kana}」？`)) return
+  const res = await fetch(`/api/reading/${w.id}`, { method: 'DELETE' })
+  if (res.ok) {
+    flash('已删除', 'ok')
+    if (editingReadingId.value === w.id) resetReadingForm()
+    loadLists()
+  }
+}
+
 // ---------- 拟态 ----------
 function resetOnoForm() {
   body.value = ''
@@ -149,25 +208,14 @@ async function saveOno() {
   const payload = { body: body.value }
   const editing = editingOnoId.value
   const res = editing
-    ? await fetch(`/api/onomatopoeia/${editing}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-    : await fetch('/api/onomatopoeia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+    ? await fetch(`/api/onomatopoeia/${editing}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    : await fetch('/api/onomatopoeia', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   const data = await res.json()
   if (!res.ok) {
     flash(data.error || '操作失败', 'err')
     return
   }
-  flash(
-    editing ? '已保存修改' : '已添加段落' + (data.blanks ? `（${data.blanks} 个空）` : ''),
-    'ok'
-  )
+  flash(editing ? '已保存修改' : '已添加段落' + (data.blanks ? `（${data.blanks} 个空）` : ''), 'ok')
   resetOnoForm()
   loadLists()
 }
@@ -189,30 +237,21 @@ async function delOno(o) {
 
 <template>
   <div>
-    <button class="ghost" style="padding-left: 0" @click="router.push('/')">
-      ← 返回
-    </button>
+    <button class="ghost" style="padding-left: 0" @click="router.push('/')">← 返回</button>
     <h1 class="title">录入单词</h1>
 
     <div class="row" style="margin-bottom: 20px">
-      <button :class="tab === 'kanji' ? '' : 'secondary'" style="flex: 1" @click="tab = 'kanji'">
-        表记词
-      </button>
-      <button :class="tab === 'ono' ? '' : 'secondary'" style="flex: 1" @click="tab = 'ono'">
-        拟态词
-      </button>
+      <button :class="tab === 'kanji' ? '' : 'secondary'" style="flex: 1" @click="tab = 'kanji'">表记词</button>
+      <button :class="tab === 'reading' ? '' : 'secondary'" style="flex: 1" @click="tab = 'reading'">认读词</button>
+      <button :class="tab === 'ono' ? '' : 'secondary'" style="flex: 1" @click="tab = 'ono'">拟态词</button>
     </div>
 
-    <p v-if="msg" :class="msgType === 'ok' ? 'msg-ok' : 'msg-err'" style="margin-bottom: 12px">
-      {{ msg }}
-    </p>
+    <p v-if="msg" :class="msgType === 'ok' ? 'msg-ok' : 'msg-err'" style="margin-bottom: 12px">{{ msg }}</p>
 
     <!-- 表记 -->
     <div v-if="tab === 'kanji'">
       <div class="card">
-        <p v-if="editingKanjiId" class="subtitle" style="margin-bottom: 12px">
-          正在编辑（分数保留）
-        </p>
+        <p v-if="editingKanjiId" class="subtitle" style="margin-bottom: 12px">正在编辑（分数保留）</p>
         <div class="field">
           <label>表记（汉字写法）</label>
           <input v-model="hyoki" placeholder="勉強" />
@@ -223,64 +262,73 @@ async function delOno(o) {
         </div>
         <div class="field">
           <label>日文释义（可多条，「粗」标加粗主要释义）</label>
-          <div
-            v-for="(m, mi) in meanings"
-            :key="mi"
-            class="row"
-            style="margin-bottom: 8px; align-items: center"
-          >
+          <div v-for="(m, mi) in meanings" :key="mi" class="row" style="margin-bottom: 8px; align-items: center">
             <input v-model="m.t" placeholder="勉学にはげむこと" style="flex: 1" />
-            <button
-              class="ghost"
-              :style="m.b ? 'color:var(--accent);font-weight:700' : ''"
-              style="padding: 8px 12px"
-              @click="m.b = !m.b"
-            >
-              粗
-            </button>
-            <button
-              v-if="meanings.length > 1"
-              class="ghost"
-              style="padding: 8px 10px"
-              @click="removeMeaning(mi)"
-            >
-              ×
-            </button>
+            <button class="ghost" :style="m.b ? 'color:var(--accent);font-weight:700' : ''" style="padding: 8px 12px" @click="m.b = !m.b">粗</button>
+            <button v-if="meanings.length > 1" class="ghost" style="padding: 8px 10px" @click="removeMeaning(mi)">×</button>
           </div>
-          <button class="secondary" style="width: 100%; padding: 8px" @click="addMeaning">
-            + 添加释义
-          </button>
+          <button class="secondary" style="width: 100%; padding: 8px" @click="addMeaning">+ 添加释义</button>
         </div>
         <div class="row">
-          <button style="flex: 1" @click="saveKanji">
-            {{ editingKanjiId ? '保存修改' : '添加' }}
-          </button>
+          <button style="flex: 1" @click="saveKanji">{{ editingKanjiId ? '保存修改' : '添加' }}</button>
           <button v-if="editingKanjiId" class="ghost" @click="resetKanjiForm">取消</button>
         </div>
       </div>
-      <p class="subtitle">
-        已录入 {{ kanjiList.length }} 个表记词（复习 {{ kanjiStat.review }} · 毕业
-        {{ kanjiStat.done }}）
-      </p>
+      <p class="subtitle">已录入 {{ kanjiList.length }} 个表记词（复习 {{ kanjiStat.review }} · 毕业 {{ kanjiStat.done }}）</p>
       <div v-for="w in kanjiList" :key="w.id" class="card">
         <div>
           <strong>{{ w.hyoki }}</strong> — {{ w.kana }} —
           <template v-for="(m, mi) in parseMeaning(w.meaning)" :key="mi"
             ><span :style="m.b ? 'font-weight:700' : ''">{{ m.t }}</span
-            ><span
-              v-if="mi < parseMeaning(w.meaning).length - 1"
-              style="color: var(--muted)"
-            >
-              / </span
-            ></template
+            ><span v-if="mi < parseMeaning(w.meaning).length - 1" style="color: var(--muted)"> / </span></template
           >
           <span :style="scoreStyle(w.score)"> · {{ w.score }} 分</span>
         </div>
         <div class="row" style="margin-top: 10px">
-          <button class="secondary" style="flex: 1; padding: 8px" @click="editKanji(w)">
-            编辑
-          </button>
+          <button class="secondary" style="flex: 1; padding: 8px" @click="editKanji(w)">编辑</button>
           <button class="ghost" style="padding: 8px 16px" @click="delKanji(w)">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 认读 -->
+    <div v-else-if="tab === 'reading'">
+      <div class="card">
+        <p v-if="editingReadingId" class="subtitle" style="margin-bottom: 12px">正在编辑（分数保留）</p>
+        <div class="field">
+          <label>假名（必填，题面）</label>
+          <input v-model="rkana" placeholder="あなどる" />
+        </div>
+        <div class="field">
+          <label>汉字形式（可选）</label>
+          <input v-model="rkanji" placeholder="侮る" />
+        </div>
+        <div class="field">
+          <label>意思（每条 = 中文意思 + 日语造句 + 中文解释）</label>
+          <div v-for="(m, mi) in rmeanings" :key="mi" class="card" style="padding: 12px; margin-bottom: 8px">
+            <input v-model="m.cn" placeholder="中文意思：轻视、小看" style="margin-bottom: 6px" />
+            <input v-model="m.sentence" placeholder="日语造句（可选）" style="margin-bottom: 6px" />
+            <input v-model="m.note" placeholder="中文解释（可选）" />
+            <button v-if="rmeanings.length > 1" class="ghost" style="padding: 6px 10px; margin-top: 6px" @click="removeRMeaning(mi)">删除这条意思</button>
+          </div>
+          <button class="secondary" style="width: 100%; padding: 8px" @click="addRMeaning">+ 添加意思</button>
+        </div>
+        <div class="row">
+          <button style="flex: 1" @click="saveReading">{{ editingReadingId ? '保存修改' : '添加' }}</button>
+          <button v-if="editingReadingId" class="ghost" @click="resetReadingForm">取消</button>
+        </div>
+      </div>
+      <p class="subtitle">已录入 {{ readingList.length }} 个认读词（复习 {{ readingStat.review }} · 毕业 {{ readingStat.done }}）</p>
+      <div v-for="w in readingList" :key="w.id" class="card">
+        <div>
+          <strong>{{ w.kana }}</strong>
+          <span v-if="w.kanji" style="margin-left: 8px">{{ w.kanji }}</span>
+          <span :style="scoreStyle(w.score)"> · {{ w.score }} 分</span>
+        </div>
+        <div style="font-size: 14px; color: var(--muted); margin-top: 4px">{{ readingMeaningSummary(w.meanings) }}</div>
+        <div class="row" style="margin-top: 10px">
+          <button class="secondary" style="flex: 1; padding: 8px" @click="editReading(w)">编辑</button>
+          <button class="ghost" style="padding: 8px 16px" @click="delReading(w)">删除</button>
         </div>
       </div>
     </div>
@@ -288,34 +336,22 @@ async function delOno(o) {
     <!-- 拟态 -->
     <div v-else>
       <div class="card">
-        <p v-if="editingOnoId" class="subtitle" style="margin-bottom: 12px">
-          正在编辑（分数保留）
-        </p>
+        <p v-if="editingOnoId" class="subtitle" style="margin-bottom: 12px">正在编辑（分数保留）</p>
         <div class="field">
           <label>段落（用 **词** 标出要挖的空，至少 2 个）</label>
-          <textarea
-            v-model="body"
-            rows="6"
-            placeholder="窓の外では風が吹いて、古い雨戸が**がたがた**と鳴っている。「もっと**ゆっくり**休みたい」。"
-          ></textarea>
+          <textarea v-model="body" rows="6" placeholder="窓の外では風が吹いて、古い雨戸が**がたがた**と鳴っている。「もっと**ゆっくり**休みたい」。"></textarea>
         </div>
         <div class="row">
-          <button style="flex: 1" @click="saveOno">
-            {{ editingOnoId ? '保存修改' : '添加' }}
-          </button>
+          <button style="flex: 1" @click="saveOno">{{ editingOnoId ? '保存修改' : '添加' }}</button>
           <button v-if="editingOnoId" class="ghost" @click="resetOnoForm">取消</button>
         </div>
       </div>
-      <p class="subtitle">
-        已录入 {{ onoList.length }} 段（复习 {{ onoStat.review }} · 毕业 {{ onoStat.done }}）
-      </p>
+      <p class="subtitle">已录入 {{ onoList.length }} 段（复习 {{ onoStat.review }} · 毕业 {{ onoStat.done }}）</p>
       <div v-for="o in onoList" :key="o.id" class="card">
         <div style="font-size: 15px; line-height: 1.7; white-space: pre-wrap">{{ o.body }}</div>
         <div :style="{ ...scoreStyle(o.score), marginTop: '4px' }">{{ o.score }} 分</div>
         <div class="row" style="margin-top: 10px">
-          <button class="secondary" style="flex: 1; padding: 8px" @click="editOno(o)">
-            编辑
-          </button>
+          <button class="secondary" style="flex: 1; padding: 8px" @click="editOno(o)">编辑</button>
           <button class="ghost" style="padding: 8px 16px" @click="delOno(o)">删除</button>
         </div>
       </div>

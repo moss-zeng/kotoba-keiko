@@ -23,6 +23,7 @@ const result = ref(null)
 const submitting = ref(false) // 提交锁，防止一题被提交两次
 const submitErr = ref(false)
 const copied = ref(false)
+const readingRevealed = ref(false) // 认读题是否已翻开
 
 const current = computed(() => questions.value[index.value] || null)
 const total = computed(() => questions.value.length)
@@ -55,6 +56,7 @@ function initQuestion() {
   showMeaning.value = false
   selectedBlank.value = null
   copied.value = false
+  readingRevealed.value = false
   const q = current.value
   if (q && q.type === 'ono') {
     filled.value = q.parts.filter((p) => p.t === 'blank').map(() => null)
@@ -150,6 +152,25 @@ async function copyOno() {
       copied.value = false
     }, 1500)
   } catch (e) {}
+}
+
+// 认读题：自测，前端直接判定，不调判分接口
+function answerReading(known) {
+  if (result.value || submitting.value) return
+  submitting.value = true
+  const q = current.value
+  result.value = { correct: known, reading: true }
+  answered.value.push({
+    type: 'reading',
+    id: q.id,
+    review: q.review,
+    correct: known,
+    kana: q.kana,
+    kanji: q.kanji,
+    meanings: q.meanings,
+  })
+  saveProgress()
+  submitting.value = false
 }
 
 function next() {
@@ -265,6 +286,31 @@ async function exitDiscard() {
         />
       </div>
 
+      <!-- 认读题 -->
+      <div v-else-if="current.type === 'reading'" class="card center">
+        <div style="font-size: 32px; font-weight: 700; margin: 16px 0">{{ current.kana }}</div>
+        <div v-if="!readingRevealed">
+          <button class="secondary" @click="readingRevealed = true">翻开</button>
+        </div>
+        <div v-else style="text-align: left">
+          <div
+            v-if="current.kanji"
+            style="font-size: 22px; font-weight: 600; margin-bottom: 10px; text-align: center"
+          >
+            {{ current.kanji }}
+          </div>
+          <div v-for="(m, mi) in current.meanings" :key="mi" style="margin-bottom: 12px">
+            <div style="font-weight: 600">{{ m.cn }}</div>
+            <div v-if="m.sentence" class="subtitle" style="margin: 2px 0">{{ m.sentence }}</div>
+            <div v-if="m.note" class="subtitle" style="margin: 2px 0">{{ m.note }}</div>
+          </div>
+          <div v-if="!result" class="row" style="margin-top: 8px">
+            <button class="secondary" style="flex: 1" @click="answerReading(false)">不认识</button>
+            <button style="flex: 1" @click="answerReading(true)">认识</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 拟态题 -->
       <div v-else class="card">
         <p style="font-size: 16px; line-height: 2.2; white-space: pre-wrap">
@@ -296,9 +342,17 @@ async function exitDiscard() {
       <!-- 结果 -->
       <div v-if="result" class="card">
         <strong :class="result.correct ? 'msg-ok' : 'msg-err'">
-          {{ result.correct ? '✓ 正确' : '✗ 错误' }}
+          {{
+            result.reading
+              ? result.correct
+                ? '✓ 认识'
+                : '✗ 不认识'
+              : result.correct
+                ? '✓ 正确'
+                : '✗ 错误'
+          }}
         </strong>
-        <div v-if="!result.correct" style="margin-top: 4px">
+        <div v-if="!result.correct && !result.reading" style="margin-top: 4px">
           正确答案：{{
             Array.isArray(result.correctAnswer)
               ? result.correctAnswer.join(' / ')
@@ -311,14 +365,14 @@ async function exitDiscard() {
         提交失败，请重试
       </p>
       <button
-        v-if="!result"
+        v-if="!result && current.type !== 'reading'"
         style="width: 100%"
         :disabled="!canSubmit || submitting"
         @click="submit"
       >
         {{ submitting ? '提交中…' : '提交' }}
       </button>
-      <button v-else style="width: 100%" @click="next">
+      <button v-else-if="result" style="width: 100%" @click="next">
         {{ index + 1 >= total ? '查看结果' : '下一题' }}
       </button>
     </div>

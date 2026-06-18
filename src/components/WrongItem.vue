@@ -75,6 +75,15 @@ const kanjiCmp = computed(() => {
       </div>
     </template>
 
+    <!-- 认读题 -->
+    <template v-else-if="item.type === 'reading'">
+      <strong>{{ item.kana }}</strong>
+      <span v-if="item.kanji" style="margin-left: 8px; color: var(--muted)">{{ item.kanji }}</span>
+      <div class="meaning">
+        <div v-for="(m, mi) in (item.meanings || [])" :key="mi">{{ m.cn }}</div>
+      </div>
+    </template>
+
     <!-- 拟态题 -->
     <template v-else>
       <span class="ono">

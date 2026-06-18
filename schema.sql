@@ -9,6 +9,17 @@ CREATE TABLE IF NOT EXISTS kanji_words (
   created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ========== 认读词（题型C：看假名自测认识/不认识）==========
+CREATE TABLE IF NOT EXISTS reading_words (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  kana       TEXT    NOT NULL,            -- 假名（必填，题面）
+  kanji      TEXT,                        -- 汉字形式（可选）
+  meanings   TEXT    NOT NULL,            -- 多义 JSON：[{cn 中文意思, sentence 日语造句, note 中文解释}]
+  score        REAL    NOT NULL DEFAULT 0,  -- 认识+0.5/不认识-1.5；3≤score<4 待复习；≥4 毕业
+  graduated_at TEXT,                          -- 升入[3,4)的时间(UTC)，满 15 天进复习
+  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 -- ========== 拟态词段落（题型B：完形填空配对）==========
 CREATE TABLE IF NOT EXISTS onomatopoeia (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
