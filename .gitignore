@@ -13,6 +13,7 @@ dist-ssr
 *.local
 .wrangler
 CLAUDE.md
+progress.md
 
 # Editor directories and files
 .vscode/*

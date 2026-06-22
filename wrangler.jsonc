@@ -11,5 +11,11 @@
       // 部署时填你 dashboard 里的 Database ID；本地开发用 --local 不需要真实 ID
       "database_id": "808f43d0-f44b-42dd-a903-39b338fbf5c8"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "AUDIO", // 代码里用 env.AUDIO 访问听力音频
+      "bucket_name": "kotoba-keiko-audio"
+    }
   ]
 }

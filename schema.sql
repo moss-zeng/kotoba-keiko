@@ -59,3 +59,33 @@ CREATE TABLE IF NOT EXISTS grammar_state (
   state     TEXT NOT NULL,     -- 'seen'(已看) / 'key'(重点) / 'known'(熟悉)；未看(new)不存
   collapsed INTEGER NOT NULL DEFAULT 0  -- 1=收起例句（持久）
 );
+
+-- ========== 听力集（一份听力音频，音频本体存 R2）==========
+CREATE TABLE IF NOT EXISTS listening_set (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT    NOT NULL,                  -- 听力集名字，如「2023-12 真题」
+  audio_key  TEXT,                              -- R2 中的音频路径；null=未上传
+  duration   REAL,                              -- 音频总时长(秒)
+  created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ========== 音频小节（切割结果，靠 seq 与文章配对）==========
+CREATE TABLE IF NOT EXISTS listening_segment (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  set_id     INTEGER NOT NULL,                  -- 所属听力集
+  seq        INTEGER NOT NULL,                  -- 序号(配对锚点，1起)
+  name       TEXT,                              -- 显示名(可改)，null=用「第N段」
+  start_sec  REAL    NOT NULL,                  -- 区间起点(秒)
+  end_sec    REAL    NOT NULL                   -- 区间终点(秒)
+);
+
+-- ========== 听力文章（靠 set_id+seq 与小节配对）==========
+CREATE TABLE IF NOT EXISTS listening_article (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  set_id     INTEGER NOT NULL,
+  seq        INTEGER NOT NULL,
+  text       TEXT    NOT NULL DEFAULT '',       -- 原文
+  tokens     TEXT    NOT NULL DEFAULT '[]',     -- 分词结果 JSON：[{w 表层, r 读音(平假名), base 辞书形}]，手动修正后以此为准
+  updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  UNIQUE (set_id, seq)
+);
