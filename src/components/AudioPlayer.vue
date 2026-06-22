@@ -18,6 +18,15 @@ const cur = ref(0)
 const playing = ref(false)
 const dragging = ref(false)
 
+// 倍速（localStorage 记忆，跨小节/会话保持）
+const SPEEDS = [0.75, 1, 1.25, 1.5, 2]
+const rate = ref(Number(localStorage.getItem('listen_rate')) || 1)
+function setRate(r) {
+  rate.value = r
+  if (audioEl.value) audioEl.value.playbackRate = r
+  localStorage.setItem('listen_rate', String(r))
+}
+
 const rEnd = computed(() => (props.end != null ? props.end : duration.value))
 const span = computed(() => Math.max(0.0001, rEnd.value - props.start))
 const frac = computed(() => Math.min(1, Math.max(0, (cur.value - props.start) / span.value)))
@@ -30,6 +39,7 @@ function fmt(s) {
 function onMeta() {
   const a = audioEl.value
   duration.value = a?.duration || 0
+  if (a) a.playbackRate = rate.value // 新音频元素会重置为 1，重新套用记忆的倍速
   emit('duration', duration.value)
   // 初始定位到区间起点，避免「0:00 进度条已走一点」
   if (a && a.currentTime < props.start) a.currentTime = props.start
@@ -140,7 +150,20 @@ defineExpose({ pause, seekAbs })
         <div class="bar-handle" :style="{ left: frac * 100 + '%' }" />
       </div>
     </div>
-    <div class="time">{{ fmt(cur - start) }} / {{ fmt(span) }}</div>
+    <div class="foot">
+      <div class="speeds">
+        <button
+          v-for="s in SPEEDS"
+          :key="s"
+          class="spd"
+          :class="{ on: rate === s }"
+          @click="setRate(s)"
+        >
+          {{ s }}x
+        </button>
+      </div>
+      <div class="time">{{ fmt(cur - start) }} / {{ fmt(span) }}</div>
+    </div>
   </div>
 </template>
 
@@ -179,10 +202,29 @@ defineExpose({ pause, seekAbs })
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.speeds {
+  display: flex;
+  gap: 4px;
+}
+.spd {
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--accent-light);
+  color: var(--accent);
+}
+.spd.on {
+  background: var(--accent);
+  color: #fff;
+}
 .time {
   font-size: 13px;
   color: var(--muted);
-  text-align: right;
-  margin-top: 4px;
 }
 </style>
