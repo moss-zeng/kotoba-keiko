@@ -19,7 +19,7 @@ const playing = ref(false)
 const dragging = ref(false)
 
 // 倍速（localStorage 记忆，跨小节/会话保持）
-const SPEEDS = [0.75, 1, 1.25, 1.5, 2]
+const SPEEDS = [1, 1.25, 1.5, 1.75, 2]
 const rate = ref(Number(localStorage.getItem('listen_rate')) || 1)
 function setRate(r) {
   rate.value = r
@@ -213,9 +213,11 @@ defineExpose({ pause, seekAbs })
   gap: 4px;
 }
 .spd {
-  padding: 4px 8px;
+  min-width: 48px;
+  padding: 4px 6px;
   font-size: 13px;
   font-weight: 600;
+  text-align: center;
   background: var(--accent-light);
   color: var(--accent);
 }
