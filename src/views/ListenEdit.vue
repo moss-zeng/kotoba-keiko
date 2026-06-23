@@ -108,9 +108,13 @@ async function onFile(e) {
 const duration = ref(0)
 const cutPoints = ref([])
 const cur = ref(0) // 来自播放器回调的当前播放位置
+const player = ref(null)
 
 function onDuration(d) {
   if (d) duration.value = d
+}
+function seekTo(p) {
+  player.value?.seekAbs(p)
 }
 function addCut() {
   const t = Math.round(cur.value * 10) / 10
@@ -127,6 +131,25 @@ function removeCut(i) {
   cutPoints.value = cutPoints.value.filter((_, idx) => idx !== i)
 }
 const previewCount = computed(() => cutPoints.value.length + 1)
+
+// 切点按 10 分钟分桶，默认折叠（一卷 24 个切点全展开太乱）
+const expandedBuckets = ref(new Set())
+function toggleBucket(b) {
+  const s = new Set(expandedBuckets.value)
+  s.has(b) ? s.delete(b) : s.add(b)
+  expandedBuckets.value = s
+}
+const cutBuckets = computed(() => {
+  const map = new Map()
+  cutPoints.value.forEach((p, i) => {
+    const b = Math.floor(p / 600)
+    if (!map.has(b)) map.set(b, [])
+    map.get(b).push({ p, i })
+  })
+  return [...map.keys()]
+    .sort((a, b) => a - b)
+    .map((b) => ({ b, label: `${b * 10}–${b * 10 + 10} 分钟`, items: map.get(b) }))
+})
 
 async function saveCut() {
   if (!duration.value) return flash('请先上传音频', 'err')
@@ -158,14 +181,18 @@ function rebuildArts() {
     const ex = articles.value.find((a) => a.seq === seg.seq)
     return {
       seq: seg.seq,
+      name: seg.name || '',
       label: seg.name || `第${seg.seq}段`,
       text: ex ? ex.text : '',
       tokens: ex ? JSON.parse(ex.tokens || '[]') : [],
       editing: false,
+      open: false, // 文章框默认收起，点标题展开
       status: '',
     }
   })
 }
+// 「旁白」小节的录入框默认隐藏（在「开始听力」改名后才出现）
+const visibleArts = computed(() => arts.value.filter((a) => (a.name || '').trim() !== '旁白'))
 
 async function doTokenize(art) {
   art.status = '加载词典 / 分词中…'
@@ -227,22 +254,40 @@ async function saveArt(art) {
       <p class="subtitle" style="margin-bottom: 10px">
         切割（在分界处加切点，切成 {{ previewCount }} 段）
       </p>
-      <AudioPlayer :src="audioUrl" @timeupdate="cur = $event" @duration="onDuration" />
+      <AudioPlayer ref="player" :src="audioUrl" @timeupdate="cur = $event" @duration="onDuration" />
       <button style="width: 100%; padding: 10px; margin-top: 10px" @click="addCut">
         在此加切点（{{ fmt(cur) }}）
       </button>
 
-      <div v-if="cutPoints.length" style="margin-top: 12px">
-        <div
-          v-for="(p, i) in cutPoints"
-          :key="i"
-          class="row"
-          style="align-items: center; margin-bottom: 6px"
-        >
-          <span style="flex: 1">切点 {{ i + 1 }}：{{ fmt(p) }}</span>
-          <button class="ghost" style="padding: 6px 10px" @click="nudge(i, -0.5)">−0.5</button>
-          <button class="ghost" style="padding: 6px 10px" @click="nudge(i, 0.5)">+0.5</button>
-          <button class="ghost" style="padding: 6px 10px" @click="removeCut(i)">×</button>
+      <!-- 切点按 10 分钟分桶折叠，点切点跳到对应位置 -->
+      <div v-if="cutBuckets.length" style="margin-top: 12px">
+        <div v-for="grp in cutBuckets" :key="grp.b" style="margin-bottom: 4px">
+          <button
+            class="ghost"
+            style="width: 100%; text-align: left; padding: 8px 4px; font-size: 14px"
+            @click="toggleBucket(grp.b)"
+          >
+            {{ expandedBuckets.has(grp.b) ? '▾' : '▸' }} {{ grp.label }}（{{ grp.items.length }} 个切点）
+          </button>
+          <template v-if="expandedBuckets.has(grp.b)">
+            <div
+              v-for="it in grp.items"
+              :key="it.i"
+              class="row"
+              style="align-items: center; margin-bottom: 6px; padding-left: 12px"
+            >
+              <button
+                class="ghost"
+                style="flex: 1; text-align: left; padding: 6px 4px"
+                @click="seekTo(it.p)"
+              >
+                切点 {{ it.i + 1 }}：{{ fmt(it.p) }} ▶
+              </button>
+              <button class="ghost" style="padding: 6px 10px" @click="nudge(it.i, -0.5)">−0.5</button>
+              <button class="ghost" style="padding: 6px 10px" @click="nudge(it.i, 0.5)">+0.5</button>
+              <button class="ghost" style="padding: 6px 10px" @click="removeCut(it.i)">×</button>
+            </div>
+          </template>
         </div>
       </div>
       <button class="secondary" style="width: 100%; padding: 10px; margin-top: 10px" @click="saveCut">
@@ -250,35 +295,45 @@ async function saveArt(art) {
       </button>
     </div>
 
-    <!-- 文章 -->
-    <div v-if="arts.length">
-      <p class="subtitle">逐段录入文章（与小节按序号配对）</p>
-      <div v-for="art in arts" :key="art.seq" class="card">
-        <strong>{{ art.label }}</strong>
-        <textarea
-          v-model="art.text"
-          rows="4"
-          placeholder="粘贴这一段的听力原文"
-          style="margin: 8px 0"
-        />
-        <div class="row">
-          <button class="secondary" style="flex: 1; padding: 8px" @click="doTokenize(art)">分词</button>
-          <button
-            v-if="art.tokens.length"
-            class="ghost"
-            style="padding: 8px 12px"
-            @click="art.editing = !art.editing"
-          >
-            {{ art.editing ? '预览' : '修正' }}
-          </button>
-          <button v-if="art.tokens.length" style="padding: 8px 14px" @click="saveArt(art)">保存</button>
+    <!-- 文章（点标题展开/收起；旁白小节默认隐藏）-->
+    <div v-if="visibleArts.length">
+      <p class="subtitle">逐段录入文章（与小节按序号配对，点标题展开）</p>
+      <div v-for="art in visibleArts" :key="art.seq" class="card">
+        <div
+          style="display: flex; justify-content: space-between; align-items: center; cursor: pointer"
+          @click="art.open = !art.open"
+        >
+          <strong>{{ art.label }}</strong>
+          <span style="color: var(--muted); font-size: 14px">{{
+            art.open ? '收起 ▾' : art.tokens.length || art.text ? '已录入 ▸' : '展开 ▸'
+          }}</span>
         </div>
-        <p v-if="art.status" class="subtitle" style="margin: 8px 0 0">{{ art.status }}</p>
-        <div v-if="art.tokens.length" style="margin-top: 12px">
-          <ArticleText v-model:tokens="art.tokens" :editing="art.editing" />
-        </div>
+        <template v-if="art.open">
+          <textarea
+            v-model="art.text"
+            rows="4"
+            placeholder="粘贴这一段的听力原文"
+            style="margin: 8px 0"
+          />
+          <div class="row">
+            <button class="secondary" style="flex: 1; padding: 8px" @click="doTokenize(art)">分词</button>
+            <button
+              v-if="art.tokens.length"
+              class="ghost"
+              style="padding: 8px 12px"
+              @click="art.editing = !art.editing"
+            >
+              {{ art.editing ? '预览' : '修正' }}
+            </button>
+            <button v-if="art.tokens.length" style="padding: 8px 14px" @click="saveArt(art)">保存</button>
+          </div>
+          <p v-if="art.status" class="subtitle" style="margin: 8px 0 0">{{ art.status }}</p>
+          <div v-if="art.tokens.length" style="margin-top: 12px">
+            <ArticleText v-model:tokens="art.tokens" :editing="art.editing" />
+          </div>
+        </template>
       </div>
     </div>
-    <p v-else-if="audioUrl" class="subtitle">保存切点后，这里会按小节出现文章录入框。</p>
+    <p v-else-if="audioUrl" class="subtitle">保存切点后，这里会按小节出现文章录入框（旁白小节默认隐藏）。</p>
   </div>
 </template>
