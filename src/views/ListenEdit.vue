@@ -381,7 +381,7 @@ async function saveTranslation() {
     <p v-else-if="audioUrl" class="subtitle">保存切点后，这里会按小节出现文章录入框（旁白小节默认隐藏）。</p>
 
     <!-- 翻译弹窗：框数 = 段落数，按段粘贴中文 -->
-    <div v-if="transModal" class="modal-mask" @click.self="transModal = null">
+    <div v-if="transModal" class="modal-mask">
       <div class="modal">
         <div class="modal-head">
           <strong>{{ transModal.label }} · 中文翻译</strong>

@@ -210,15 +210,17 @@ defineExpose({ pause, seekAbs })
 }
 .speeds {
   display: flex;
-  flex-wrap: wrap;
   gap: 4px;
+  min-width: 0; /* 允许整行被压缩，从而带动按钮等比缩小 */
 }
 .spd {
-  min-width: 48px;
+  flex: 0 1 auto; /* 空间不够时各按钮一起收缩，不换行 */
+  min-width: 0;
   padding: 4px 6px;
-  font-size: 13px;
+  font-size: clamp(11px, 2.8vw, 13px);
   font-weight: 600;
   text-align: center;
+  white-space: nowrap;
   background: var(--accent-light);
   color: var(--accent);
 }

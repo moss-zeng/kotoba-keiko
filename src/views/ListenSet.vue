@@ -1,7 +1,7 @@
 <script setup>
 // 开始听力 Level2：某听力集的小节列表（可改显示名）
 // 命名为「旁白」的小节默认不在列表显示（可展开管理，便于改回来）
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getSet, invalidate } from '../listenCache.js'
 import * as audioStore from '../audioStore.js'
@@ -20,32 +20,40 @@ const msg = ref('')
 
 // ---------- 整集音频离线缓存 ----------
 const cached = ref(false)
-const downloading = ref(false)
-const progress = ref(0)
+const resume = ref(0) // 断点续传已完成比例（0 = 无未完成的下载）
 const durationMin = computed(() => Math.round((set.value?.duration || 0) / 60))
 
+// 下载进度取自模块级状态：离开页面再回来仍能看到进度
+const dlState = computed(() =>
+  set.value?.audio_key ? audioStore.downloadState(set.value.audio_key, set.value.duration) : null
+)
+const downloading = computed(() => !!dlState.value?.downloading)
+const progress = computed(() => dlState.value?.progress || 0)
+
 async function refreshCache() {
-  cached.value = set.value?.audio_key
-    ? await audioStore.has(set.value.audio_key, set.value.duration)
-    : false
-}
-async function downloadAudio() {
-  if (!set.value?.audio_key || downloading.value) return
-  downloading.value = true
-  progress.value = 0
-  try {
-    await audioStore.download(
-      set.value.audio_key,
-      set.value.duration,
-      `/api/listen/audio/${set.value.audio_key}`,
-      (frac) => (progress.value = frac)
-    )
-    cached.value = true
-  } catch (e) {
-    msg.value = '下载失败，请重试'
-  } finally {
-    downloading.value = false
+  if (!set.value?.audio_key) {
+    cached.value = false
+    resume.value = 0
+    return
   }
+  cached.value = await audioStore.has(set.value.audio_key, set.value.duration)
+  resume.value = cached.value
+    ? 0
+    : (await audioStore.partialProgress(set.value.audio_key, set.value.duration)) || 0
+}
+async function discardCache() {
+  await audioStore.remove(set.value.audio_key, set.value.duration)
+  resume.value = 0
+}
+// 下载完成（downloading 由 true→false）后刷新缓存状态
+watch(downloading, (now, prev) => {
+  if (prev && !now) refreshCache()
+})
+function downloadAudio() {
+  if (!set.value?.audio_key || downloading.value) return
+  audioStore
+    .download(set.value.audio_key, set.value.duration, `/api/listen/audio/${set.value.audio_key}`)
+    .catch(() => (msg.value = '下载失败，请重试'))
 }
 async function removeCache() {
   await audioStore.remove(set.value.audio_key, set.value.duration)
@@ -119,12 +127,23 @@ async function saveName() {
         </div>
       </template>
       <template v-else-if="downloading">
-        <p class="subtitle" style="margin-bottom: 8px">下载中… {{ Math.round(progress * 100) }}%</p>
+        <p class="subtitle" style="margin-bottom: 8px">
+          下载中… {{ Math.round(progress * 100) }}%（可离开本页，后台继续）
+        </p>
         <div class="dl-track"><div class="dl-fill" :style="{ width: progress * 100 + '%' }" /></div>
       </template>
       <template v-else>
         <button class="secondary" style="width: 100%; padding: 10px" @click="downloadAudio">
-          ⬇ 下载到本机（约 {{ durationMin }} 分，可离线 · 切小节秒开）
+          <template v-if="resume > 0">继续下载（已 {{ Math.round(resume * 100) }}%）</template>
+          <template v-else>⬇ 下载到本机（约 {{ durationMin }} 分，可离线 · 切小节秒开）</template>
+        </button>
+        <button
+          v-if="resume > 0"
+          class="ghost"
+          style="width: 100%; padding: 6px; font-size: 14px; margin-top: 6px"
+          @click="discardCache"
+        >
+          放弃已下进度
         </button>
       </template>
     </div>
