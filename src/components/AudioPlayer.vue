@@ -210,6 +210,7 @@ defineExpose({ pause, seekAbs })
 }
 .speeds {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
 }
 .spd {
@@ -228,5 +229,8 @@ defineExpose({ pause, seekAbs })
 .time {
   font-size: 13px;
   color: var(--muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: 8px;
 }
 </style>

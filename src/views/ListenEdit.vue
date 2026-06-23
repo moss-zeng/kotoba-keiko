@@ -4,6 +4,8 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ArticleText from '../components/ArticleText.vue'
 import AudioPlayer from '../components/AudioPlayer.vue'
+import { splitParagraphs } from '../listenText.js'
+import { invalidate } from '../listenCache.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -58,7 +60,10 @@ async function saveName() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: n }),
   })
-  if (res.ok) flash('名字已保存', 'ok')
+  if (res.ok) {
+    invalidate(id)
+    flash('名字已保存', 'ok')
+  }
 }
 
 // ---------- 上传音频 ----------
@@ -167,6 +172,7 @@ async function saveCut() {
     body: JSON.stringify({ segments: segs }),
   })
   if (res.ok) {
+    invalidate(id)
     flash(`已切成 ${segs.length} 段`, 'ok')
     await load()
   } else {
@@ -185,6 +191,7 @@ function rebuildArts() {
       label: seg.name || `第${seg.seq}段`,
       text: ex ? ex.text : '',
       tokens: ex ? JSON.parse(ex.tokens || '[]') : [],
+      translation: ex ? JSON.parse(ex.translation || '[]') : [],
       editing: false,
       open: false, // 文章框默认收起，点标题展开
       status: '',
@@ -213,10 +220,43 @@ async function saveArt(art) {
     body: JSON.stringify({ seq: art.seq, text, tokens: art.tokens }),
   })
   if (res.ok) {
+    invalidate(id)
     art.status = '已保存'
     setTimeout(() => (art.status = ''), 2000)
   } else {
     art.status = '保存失败'
+  }
+}
+
+// ---------- 翻译弹窗（仅对已分词录入的文章，点名字打开）----------
+const transModal = ref(null)
+function onName(art) {
+  if (art.tokens.length) openTranslation(art)
+  else art.open = !art.open // 未录入：点名字即展开录入框
+}
+function openTranslation(art) {
+  const paras = splitParagraphs(art.tokens)
+  transModal.value = {
+    art,
+    label: art.label,
+    paras,
+    values: paras.map((_, i) => art.translation[i] || ''),
+  }
+}
+async function saveTranslation() {
+  const m = transModal.value
+  const res = await fetch(`/api/listen/sets/${id}/articles`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ seq: m.art.seq, translation: m.values }),
+  })
+  if (res.ok) {
+    m.art.translation = [...m.values]
+    invalidate(id)
+    transModal.value = null
+    flash('翻译已保存', 'ok')
+  } else {
+    flash('翻译保存失败', 'err')
   }
 }
 </script>
@@ -299,14 +339,18 @@ async function saveArt(art) {
     <div v-if="visibleArts.length">
       <p class="subtitle">逐段录入文章（与小节按序号配对，点标题展开）</p>
       <div v-for="art in visibleArts" :key="art.seq" class="card">
-        <div
-          style="display: flex; justify-content: space-between; align-items: center; cursor: pointer"
-          @click="art.open = !art.open"
-        >
-          <strong>{{ art.label }}</strong>
-          <span style="color: var(--muted); font-size: 14px">{{
-            art.open ? '收起 ▾' : art.tokens.length || art.text ? '已录入 ▸' : '展开 ▸'
-          }}</span>
+        <div style="display: flex; justify-content: space-between; align-items: center">
+          <strong
+            style="cursor: pointer"
+            :title="art.tokens.length ? '点击编辑翻译' : '点击展开录入'"
+            @click="onName(art)"
+            >{{ art.label }}</strong
+          >
+          <span
+            style="color: var(--muted); font-size: 14px; cursor: pointer"
+            @click="art.open = !art.open"
+            >{{ art.open ? '收起 ▾' : art.tokens.length || art.text ? '已录入 ▸' : '展开 ▸' }}</span
+          >
         </div>
         <template v-if="art.open">
           <textarea
@@ -335,5 +379,79 @@ async function saveArt(art) {
       </div>
     </div>
     <p v-else-if="audioUrl" class="subtitle">保存切点后，这里会按小节出现文章录入框（旁白小节默认隐藏）。</p>
+
+    <!-- 翻译弹窗：框数 = 段落数，按段粘贴中文 -->
+    <div v-if="transModal" class="modal-mask" @click.self="transModal = null">
+      <div class="modal">
+        <div class="modal-head">
+          <strong>{{ transModal.label }} · 中文翻译</strong>
+          <button class="ghost" style="padding: 4px 10px" @click="transModal = null">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="subtitle" style="margin-bottom: 12px">
+            共 {{ transModal.paras.length }} 段，按段粘贴中文（留空 = 该段不显示译文）
+          </p>
+          <div v-for="(p, i) in transModal.paras" :key="i" class="trans-row">
+            <p class="trans-src">{{ p }}</p>
+            <textarea v-model="transModal.values[i]" rows="2" placeholder="该段中文翻译" />
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="ghost" style="padding: 8px 14px" @click="transModal = null">取消</button>
+          <button style="padding: 8px 16px" @click="saveTranslation">保存翻译</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 100;
+}
+.modal {
+  background: var(--card, #fff);
+  border-radius: 14px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-body {
+  padding: 16px;
+  overflow: auto;
+}
+.modal-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.trans-row {
+  margin-bottom: 14px;
+}
+.trans-src {
+  font-size: 14px;
+  line-height: 1.7;
+  margin-bottom: 6px;
+}
+.trans-row textarea {
+  width: 100%;
+}
+</style>

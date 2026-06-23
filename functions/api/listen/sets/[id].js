@@ -16,7 +16,7 @@ export async function onRequestGet({ env, params }) {
       .bind(id)
       .all(),
     env.DB.prepare(
-      'SELECT id, seq, text, tokens FROM listening_article WHERE set_id = ? ORDER BY seq'
+      'SELECT id, seq, text, tokens, translation FROM listening_article WHERE set_id = ? ORDER BY seq'
     )
       .bind(id)
       .all(),

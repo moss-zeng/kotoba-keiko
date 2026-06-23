@@ -7,6 +7,7 @@ import { ref, computed, watch, nextTick } from 'vue'
 const props = defineProps({
   tokens: { type: Array, required: true },
   editing: { type: Boolean, default: false },
+  translations: { type: Array, default: () => [] }, // 按段对齐的中文译文（仅阅读模式用）
 })
 const emit = defineEmits(['update:tokens'])
 
@@ -73,6 +74,18 @@ function toggleReveal(i) {
   const set = new Set(revealed.value)
   set.has(i) ? set.delete(i) : set.add(i)
   revealed.value = set
+}
+
+// ---------- 阅读模式：段末「译」徽标显隐译文 ----------
+const transRevealed = ref(new Set())
+function hasTrans(pi) {
+  const t = props.translations[pi]
+  return !!(t && t.trim())
+}
+function toggleTrans(pi) {
+  const set = new Set(transRevealed.value)
+  set.has(pi) ? set.delete(pi) : set.add(pi)
+  transRevealed.value = set
 }
 
 // ---------- 编辑模式：按句翻页 ----------
@@ -159,23 +172,26 @@ function splitChars(i) {
 <template>
   <!-- 阅读模式 -->
   <div v-if="!editing" class="article-read">
-    <p v-for="(para, pi) in groups" :key="pi" class="para">
-      <template v-for="(sent, si) in para" :key="si">
-        <span
-          v-for="t in sent"
-          :key="t.i"
-          :class="{ tappable: !!t.r }"
-          @click="toggleReveal(t.i)"
-        >
-          <template v-if="t.r && revealed.has(t.i)">
-            {{ ruby(t.w, t.r).pre
-            }}<ruby>{{ ruby(t.w, t.r).core }}<rt>{{ ruby(t.w, t.r).mid }}</rt></ruby
-            >{{ ruby(t.w, t.r).suf }}
-          </template>
-          <template v-else>{{ t.w }}</template>
-        </span>
-      </template>
-    </p>
+    <div v-for="(para, pi) in groups" :key="pi" class="para-block">
+      <p class="para">
+        <template v-for="(sent, si) in para" :key="si"
+          ><span
+            v-for="t in sent"
+            :key="t.i"
+            :class="{ tappable: !!t.r }"
+            @click="toggleReveal(t.i)"
+          >
+            <template v-if="t.r && revealed.has(t.i)">
+              {{ ruby(t.w, t.r).pre
+              }}<ruby>{{ ruby(t.w, t.r).core }}<rt>{{ ruby(t.w, t.r).mid }}</rt></ruby
+              >{{ ruby(t.w, t.r).suf }}
+            </template>
+            <template v-else>{{ t.w }}</template> </span
+        ></template
+        ><span v-if="hasTrans(pi)" class="trans-badge" @click="toggleTrans(pi)">译</span>
+      </p>
+      <p v-if="hasTrans(pi) && transRevealed.has(pi)" class="trans-text">{{ translations[pi] }}</p>
+    </div>
   </div>
 
   <!-- 编辑模式 -->
@@ -228,12 +244,37 @@ function splitChars(i) {
 .article-read {
   font-size: 18px;
 }
-.para {
-  line-height: 2.4;
+.para-block {
   margin-bottom: 14px;
 }
-.para:last-child {
+.para-block:last-child {
   margin-bottom: 0;
+}
+.para {
+  line-height: 2.4;
+  margin: 0;
+}
+.trans-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  cursor: pointer;
+  vertical-align: middle;
+  user-select: none;
+}
+.trans-text {
+  margin: 6px 0 0;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--muted);
 }
 .article-read .tappable {
   cursor: pointer;

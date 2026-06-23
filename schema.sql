@@ -109,8 +109,9 @@ CREATE TABLE IF NOT EXISTS listening_article (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   set_id     INTEGER NOT NULL,
   seq        INTEGER NOT NULL,
-  text       TEXT    NOT NULL DEFAULT '',       -- 原文
-  tokens     TEXT    NOT NULL DEFAULT '[]',     -- 分词结果 JSON：[{w 表层, r 读音(平假名), base 辞书形}]，手动修正后以此为准
-  updated_at TEXT    NOT NULL DEFAULT (datetime('now')),
+  text        TEXT    NOT NULL DEFAULT '',      -- 原文
+  tokens      TEXT    NOT NULL DEFAULT '[]',    -- 分词结果 JSON：[{w 表层, r 读音(平假名), base 辞书形}]，手动修正后以此为准
+  translation TEXT    NOT NULL DEFAULT '[]',    -- 按段对齐的中文翻译 JSON：["第1段译文","",...]，空串=该段不显示译文
+  updated_at  TEXT    NOT NULL DEFAULT (datetime('now')),
   UNIQUE (set_id, seq)
 );
