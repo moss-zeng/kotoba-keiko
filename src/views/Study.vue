@@ -116,6 +116,9 @@ async function submit() {
       id: q.id,
       review: q.review,
       correct: res.correct,
+      total_blanks: res.total_blanks,
+      filled_blanks: res.filled_blanks,
+      correct_blanks: res.correct_blanks,
       hyoki: q.hyoki,
       meaning: q.meaning,
       parts: q.parts,
@@ -165,6 +168,9 @@ function answerReading(known) {
     id: q.id,
     review: q.review,
     correct: known,
+    total_blanks: 1,
+    filled_blanks: 1,
+    correct_blanks: known ? 1 : 0,
     kana: q.kana,
     kanji: q.kanji,
     meanings: q.meanings,
@@ -218,7 +224,7 @@ async function exitDiscard() {
 
     <div v-else-if="phase === 'empty'" class="center">
       <h1 class="title">没有要学的词了</h1>
-      <p class="subtitle">词库里 3 分以下的词都背完了，去录入新词吧。</p>
+      <p class="subtitle">当前没有待学的词（都在复习等待期或已毕业），去录入新词吧。</p>
       <button @click="router.push('/add')">去录入</button>
     </div>
 

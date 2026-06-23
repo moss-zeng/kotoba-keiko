@@ -3,7 +3,7 @@
 
 export async function onRequestGet({ env }) {
   const { results } = await env.DB.prepare(
-    'SELECT id, kana, kanji, meanings, score FROM reading_words ORDER BY id DESC'
+    'SELECT id, kana, kanji, meanings, streak, stage FROM reading_words ORDER BY id DESC'
   ).all()
   return Response.json(results)
 }
@@ -26,7 +26,10 @@ export async function onRequestPost({ request, env }) {
     .bind(kana, kanji, JSON.stringify(meanings))
     .run()
 
-  return Response.json({ id: meta.last_row_id, kana, kanji, score: 0 }, { status: 201 })
+  return Response.json(
+    { id: meta.last_row_id, kana, kanji, streak: 0, stage: 'learning' },
+    { status: 201 }
+  )
 }
 
 function jsonError(message, status) {

@@ -1,33 +1,58 @@
+-- ========== 计分模型说明（表记/拟态用 score，认读用 streak；闯关复习共用 stage）==========
+-- stage：learning(学习中) / review1(复习关1) / review2(复习关2) / graduated(毕业，不再抽)
+-- review_due_at：当前复习关的到期时间(UTC)；learning/graduated 时为 null
+-- attempt_count：累计作答次数(派生缓存)，用于新手期系数(第1-3次×0.25 / 4-5次×0.75 / 6+×1.0)与「新题桶」判定
+-- 以上分数字段均为派生缓存，由 word_attempt(事实层)唯一决定，可随时重算
+
 -- ========== 表记词（题型A：看表记写假名）==========
 CREATE TABLE IF NOT EXISTS kanji_words (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  hyoki      TEXT    NOT NULL,            -- 表记（汉字写法），如「勉強」
-  kana       TEXT    NOT NULL,            -- 假名读音（标准答案），如「べんきょう」
-  meaning    TEXT    NOT NULL,            -- 日文释义（勿写入该词读音以免泄露答案），如「勉学にはげむこと」
-  score        INTEGER NOT NULL DEFAULT 0,  -- 0-2 常规；3=待复习；4=永久毕业
-  graduated_at TEXT,                          -- 升到 3 分的时间(UTC)，满 15 天进复习；null=未到过 3 分
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  hyoki         TEXT    NOT NULL,                 -- 表记（汉字写法），如「勉強」
+  kana          TEXT    NOT NULL,                 -- 假名读音（标准答案），如「べんきょう」
+  meaning       TEXT    NOT NULL,                 -- 日文释义（勿写入该词读音以免泄露答案）
+  score         REAL    NOT NULL DEFAULT 0,       -- 平滑掌握度；达 3.0 进复习
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  stage         TEXT    NOT NULL DEFAULT 'learning',
+  review_due_at TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ========== 认读词（题型C：看假名自测认识/不认识）==========
 CREATE TABLE IF NOT EXISTS reading_words (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  kana       TEXT    NOT NULL,            -- 假名（必填，题面）
-  kanji      TEXT,                        -- 汉字形式（可选）
-  meanings   TEXT    NOT NULL,            -- 多义 JSON：[{cn 中文意思, sentence 日语造句, note 中文解释}]
-  score        REAL    NOT NULL DEFAULT 0,  -- 认识+0.5/不认识-1.5；3≤score<4 待复习；≥4 毕业
-  graduated_at TEXT,                          -- 升入[3,4)的时间(UTC)，满 15 天进复习
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  kana          TEXT    NOT NULL,                 -- 假名（必填，题面）
+  kanji         TEXT,                             -- 汉字形式（可选）
+  meanings      TEXT    NOT NULL,                 -- 多义 JSON：[{cn, sentence, note}]
+  streak        INTEGER NOT NULL DEFAULT 0,       -- 连续认识次数；达 7 进复习；答错清 0
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  stage         TEXT    NOT NULL DEFAULT 'learning',
+  review_due_at TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
 -- ========== 拟态词段落（题型B：完形填空配对）==========
 CREATE TABLE IF NOT EXISTS onomatopoeia (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  body       TEXT    NOT NULL,            -- 带 **标记** 的整段原文
-  score        INTEGER NOT NULL DEFAULT 0,  -- 0-2 常规；3=待复习；4=永久毕业
-  graduated_at TEXT,                          -- 升到 3 分的时间(UTC)，满 15 天进复习；null=未到过 3 分
-  created_at   TEXT    NOT NULL DEFAULT (datetime('now'))
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  body          TEXT    NOT NULL,                 -- 带 **标记** 的整段原文
+  score         REAL    NOT NULL DEFAULT 0,       -- 平滑掌握度；达 3.0 进复习
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  stage         TEXT    NOT NULL DEFAULT 'learning',
+  review_due_at TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ========== 作答事实表（每答一次追加一行，永不修改；分数由它重放）==========
+CREATE TABLE IF NOT EXISTS word_attempt (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  word_type      TEXT    NOT NULL,                -- 'kanji' | 'reading' | 'ono'
+  word_id        INTEGER NOT NULL,
+  attempted_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+  total_blanks   INTEGER NOT NULL,                -- 正确答案的空数（认读=1）
+  filled_blanks  INTEGER NOT NULL,                -- 用户实际填入的空数（认读=1；表记可填错数量）
+  correct_blanks INTEGER NOT NULL,                -- 答对的空数（认读：认识=1/不认识=0）
+  is_review      INTEGER NOT NULL DEFAULT 0       -- 是否复习题
+);
+CREATE INDEX IF NOT EXISTS idx_word_attempt_word ON word_attempt(word_type, word_id);
 
 -- ========== 考试记录（错题本，全部保存）==========
 CREATE TABLE IF NOT EXISTS exam_history (

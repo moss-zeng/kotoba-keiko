@@ -1,4 +1,5 @@
-// POST /api/exam/answer —— 只判对错并返回正确答案，不改分（算分推迟到结算）
+// POST /api/exam/answer —— 判对错并返回正确答案 + 逐空统计（算分推迟到结算）
+// 返回 total_blanks/filled_blanks/correct_blanks，供结算按空格数细化扣分
 import { normalizeKana, parseOno } from './_shared.js'
 
 export async function onRequestPost({ request, env }) {
@@ -12,9 +13,20 @@ export async function onRequestPost({ request, env }) {
       .bind(id)
       .first()
     if (!row) return jsonError('题目不存在', 404)
-    const ua = normalizeKana(answer)
-    const correct = ua !== '' && ua === normalizeKana(row.kana)
-    return Response.json({ correct, correctAnswer: row.kana })
+    // 表记的「空」= 假名逐字符；填错字符数（filled≠total）由结算判 100% 扣分
+    const cArr = [...normalizeKana(row.kana)]
+    const yArr = [...normalizeKana(answer)]
+    let correct_blanks = 0
+    const n = Math.min(cArr.length, yArr.length)
+    for (let i = 0; i < n; i++) if (cArr[i] === yArr[i]) correct_blanks++
+    const correct = yArr.length > 0 && yArr.length === cArr.length && correct_blanks === cArr.length
+    return Response.json({
+      correct,
+      correctAnswer: row.kana,
+      total_blanks: cArr.length,
+      filled_blanks: yArr.length,
+      correct_blanks,
+    })
   }
 
   if (type === 'ono') {
@@ -24,11 +36,19 @@ export async function onRequestPost({ request, env }) {
     if (!row) return jsonError('题目不存在', 404)
     const { answers } = parseOno(row.body)
     const ua = Array.isArray(answer) ? answer : []
-    // 全部空都对才算整段对（分数挂整段）
-    const correct =
-      ua.length === answers.length &&
-      answers.every((a, i) => (ua[i] ?? '').trim() === a)
-    return Response.json({ correct, correctAnswer: answers })
+    let correct_blanks = 0
+    answers.forEach((a, i) => {
+      if ((ua[i] ?? '').trim() === a) correct_blanks++
+    })
+    const filled_blanks = ua.filter((x) => (x ?? '').trim() !== '').length
+    const correct = correct_blanks === answers.length
+    return Response.json({
+      correct,
+      correctAnswer: answers,
+      total_blanks: answers.length,
+      filled_blanks,
+      correct_blanks,
+    })
   }
 
   return jsonError('未知题型', 400)

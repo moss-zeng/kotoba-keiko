@@ -68,13 +68,13 @@ const filteredOno = computed(() => {
   )
 })
 
-// 复习(3≤score<4) / 毕业(≥4)
+// 复习(review1/review2) / 毕业(graduated)
 function statOf(list) {
   let review = 0
   let done = 0
   for (const w of list) {
-    if (w.score >= 4) done++
-    else if (w.score >= 3) review++
+    if (w.stage === 'graduated') done++
+    else if (w.stage === 'review1' || w.stage === 'review2') review++
   }
   return { review, done }
 }
@@ -82,11 +82,26 @@ const kanjiStat = computed(() => statOf(kanjiList.value))
 const readingStat = computed(() => statOf(readingList.value))
 const onoStat = computed(() => statOf(onoList.value))
 
-function scoreStyle(score) {
-  return {
-    color: score >= 4 ? 'var(--ok)' : score < 0 ? 'var(--danger)' : 'var(--muted)',
-    fontSize: '14px',
-  }
+function stageLabel(w) {
+  return w.stage === 'graduated'
+    ? '毕业'
+    : w.stage === 'review1'
+      ? '复习①'
+      : w.stage === 'review2'
+        ? '复习②'
+        : ''
+}
+function fmtScore(n) {
+  return Number(n ?? 0).toFixed(1)
+}
+function infoStyle(w) {
+  const color =
+    w.stage === 'graduated'
+      ? 'var(--ok)'
+      : typeof w.score === 'number' && w.score < 0
+        ? 'var(--danger)'
+        : 'var(--muted)'
+  return { color, fontSize: '14px' }
 }
 
 function readingMeaningSummary(raw) {
@@ -352,7 +367,9 @@ async function delOno(o) {
             ><span :style="m.b ? 'font-weight:700' : ''">{{ m.t }}</span
             ><span v-if="mi < parseMeaning(w.meaning).length - 1" style="color: var(--muted)"> / </span></template
           >
-          <span :style="scoreStyle(w.score)"> · {{ w.score }} 分</span>
+          <span :style="infoStyle(w)">
+            · {{ fmtScore(w.score) }} 分<template v-if="stageLabel(w)"> · {{ stageLabel(w) }}</template></span
+          >
         </div>
         <div class="row" style="margin-top: 10px">
           <button class="secondary" style="flex: 1; padding: 8px" @click="editKanji(w)">编辑</button>
@@ -401,7 +418,9 @@ async function delOno(o) {
         <div>
           <strong>{{ w.kana }}</strong>
           <span v-if="w.kanji" style="margin-left: 8px">{{ w.kanji }}</span>
-          <span :style="scoreStyle(w.score)"> · {{ w.score }} 分</span>
+          <span :style="infoStyle(w)">
+            · 连击 {{ w.streak }}<template v-if="stageLabel(w)"> · {{ stageLabel(w) }}</template></span
+          >
         </div>
         <div style="font-size: 14px; color: var(--muted); margin-top: 4px">{{ readingMeaningSummary(w.meanings) }}</div>
         <div class="row" style="margin-top: 10px">
@@ -435,7 +454,9 @@ async function delOno(o) {
       </p>
       <div v-for="o in filteredOno" :key="o.id" class="card">
         <div style="font-size: 15px; line-height: 1.7; white-space: pre-wrap">{{ o.body }}</div>
-        <div :style="{ ...scoreStyle(o.score), marginTop: '4px' }">{{ o.score }} 分</div>
+        <div :style="{ ...infoStyle(o), marginTop: '4px' }">
+          {{ fmtScore(o.score) }} 分<template v-if="stageLabel(o)"> · {{ stageLabel(o) }}</template>
+        </div>
         <div class="row" style="margin-top: 10px">
           <button class="secondary" style="flex: 1; padding: 8px" @click="editOno(o)">编辑</button>
           <button class="ghost" style="padding: 8px 16px" @click="delOno(o)">删除</button>

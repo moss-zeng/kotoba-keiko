@@ -2,7 +2,7 @@
 
 export async function onRequestGet({ env }) {
   const { results } = await env.DB.prepare(
-    'SELECT id, body, score FROM onomatopoeia ORDER BY id DESC'
+    'SELECT id, body, score, stage FROM onomatopoeia ORDER BY id DESC'
   ).all()
   return Response.json(results)
 }
@@ -30,7 +30,7 @@ export async function onRequestPost({ request, env }) {
     .run()
 
   return Response.json(
-    { id: meta.last_row_id, body, score: 0, blanks: marks.length },
+    { id: meta.last_row_id, body, score: 0, stage: 'learning', blanks: marks.length },
     { status: 201 }
   )
 }
