@@ -5,9 +5,9 @@ import { useRouter } from 'vue-router'
 const router = useRouter()
 const rows = ref([])
 const selectedKana = ref(null)
-const expanded = ref(new Set()) // 展开的语法点（按 title）
-const revealed = ref(new Set()) // 已点开（去模糊）的义项 key
-const showKnown = ref(false)
+const expandedPoints = ref(new Set()) // 展开的语法点（按对象引用）
+const expandedGroups = ref(new Set()) // 已展开的接续组（默认收起，局部状态，不入库）
+const revealed = ref(new Set()) // 已点开（去模糊）的意思（按对象引用）
 
 // 五十音图（含浊音/半浊音行；null=该位置无假名，仅占位对齐）
 const GOJUON = [
@@ -53,50 +53,64 @@ const stat = computed(() => {
   const r = currentRow.value
   if (!r) return null
   let points = 0
-  let n = 0
-  let s = 0
-  let k = 0
-  let kn = 0
+  let items = 0
+  let keys = 0
   for (const p of r.points) {
     points++
     for (const g of p.groups)
       for (const it of g.items) {
-        if (it.state === 'seen') s++
-        else if (it.state === 'key') k++
-        else if (it.state === 'known') kn++
-        else n++
+        items++
+        if (it.state === 'key') keys++
       }
   }
-  return { points, items: n + s + k + kn, n, s, k, kn }
+  return { points, items, keys }
 })
 
 function openRow(kana) {
   if (!rowMap.value[kana]) return // 没收录的暗按钮不可进入
   selectedKana.value = kana
-  expanded.value = new Set()
+  expandedPoints.value = new Set()
+  expandedGroups.value = new Set()
   revealed.value = new Set()
 }
 function backToRows() {
   selectedKana.value = null
 }
 
-function togglePoint(p) {
-  const set = new Set(expanded.value)
-  if (set.has(p.title)) set.delete(p.title)
-  else set.add(p.title)
-  expanded.value = set
+function toggleSet(refSet, obj) {
+  const s = new Set(refSet.value)
+  if (s.has(obj)) s.delete(obj)
+  else s.add(obj)
+  refSet.value = s
 }
-function isExpanded(p) {
-  return expanded.value.has(p.title)
+function togglePoint(p) {
+  toggleSet(expandedPoints, p)
+}
+function isPointExpanded(p) {
+  return expandedPoints.value.has(p)
+}
+function toggleGroup(g) {
+  toggleSet(expandedGroups, g)
+}
+function isGroupCollapsed(g) {
+  // 接续组默认收起，点击展开；无接续的义项组没有可点的接续行，恒展开
+  return !!g.setsuzoku && !expandedGroups.value.has(g)
+}
+function reveal(it) {
+  const s = new Set(revealed.value)
+  s.add(it)
+  revealed.value = s
+}
+function isRevealed(it) {
+  return revealed.value.has(it)
 }
 
-function reveal(key) {
-  const set = new Set(revealed.value)
-  set.add(key)
-  revealed.value = set
+// 重点红色传导：有接续 → 接续行红；无接续 → ### 标题红
+function groupHasKey(g) {
+  return g.items.some((it) => it.state === 'key')
 }
-function isRevealed(key) {
-  return revealed.value.has(key)
+function pointHasNakedKey(p) {
+  return p.groups.some((g) => !g.setsuzoku && groupHasKey(g))
 }
 
 async function postState(it) {
@@ -108,11 +122,12 @@ async function postState(it) {
     })
   } catch (e) {}
 }
-function setState(it, state) {
-  it.state = state
+function toggleKey(it) {
+  if (it.collapsed) return // 收起时重点不可点
+  it.state = it.state === 'key' ? 'new' : 'key'
   postState(it)
 }
-function toggleCollapse(it) {
+function toggleItemCollapse(it) {
   it.collapsed = !it.collapsed
   postState(it)
 }
@@ -154,54 +169,60 @@ function toggleCollapse(it) {
       </button>
       <h1 class="title">{{ currentRow.row || '（未分组）' }}</h1>
       <p class="subtitle">
-        共 {{ stat.points }} 个语法点 · {{ stat.items }} 义项（{{ stat.n }} 未看 ·
-        {{ stat.s }} 已看 · {{ stat.k }} 重点 · {{ stat.kn }} 熟悉）
+        共 {{ stat.points }} 语法点 · {{ stat.items }} 义项 · {{ stat.keys }} 重点
       </p>
-      <label class="show-known">
-        <input type="checkbox" v-model="showKnown" /> 显示熟悉的
-      </label>
 
       <div v-for="(p, pi) in currentRow.points" :key="pi" class="card">
-        <div class="point-title" @click="togglePoint(p)">
-          {{ isExpanded(p) ? '▾' : '▸' }} {{ p.title }}
+        <div
+          class="point-title"
+          :class="{ hot: pointHasNakedKey(p) }"
+          @click="togglePoint(p)"
+        >
+          {{ isPointExpanded(p) ? '▾' : '▸' }} {{ p.title }}
         </div>
 
-        <div v-if="isExpanded(p)" style="margin-top: 10px">
+        <div v-if="isPointExpanded(p)" style="margin-top: 10px">
           <template v-for="(g, gi) in p.groups" :key="gi">
-            <div v-if="g.pos" class="pos">{{ g.pos }}</div>
-            <template v-for="(it, ii) in g.items" :key="ii">
-              <div v-if="it.state !== 'known' || showKnown" class="item">
-                <div
-                  class="meaning"
-                  :class="{
-                    blurred: !isRevealed(it.key),
-                    seen: it.state === 'seen',
-                    key: it.state === 'key',
-                    known: it.state === 'known',
-                  }"
-                  @click="reveal(it.key)"
-                >
-                  {{ it.meaning }}
-                </div>
+            <!-- L2 接续行（可空·可收放·有重点义项则整行红） -->
+            <div
+              v-if="g.setsuzoku"
+              class="setsuzoku"
+              :class="{ hot: groupHasKey(g) }"
+              @click="toggleGroup(g)"
+            >
+              {{ isGroupCollapsed(g) ? '▸' : '▾' }} {{ g.setsuzoku }}
+            </div>
+
+            <!-- 意思义项 -->
+            <template v-if="!isGroupCollapsed(g)">
+              <div
+                v-for="(it, ii) in g.items"
+                :key="ii"
+                class="item"
+                :class="{ indent: g.setsuzoku }"
+              >
                 <template v-if="!it.collapsed">
+                  <div
+                    class="meaning"
+                    :class="{ blurred: !isRevealed(it), key: it.state === 'key' }"
+                    @click="reveal(it)"
+                  >
+                    {{ it.meaning }}
+                  </div>
+                  <div v-if="it.nuance" class="nuance">{{ it.nuance }}</div>
                   <div v-for="(ex, ei) in it.examples" :key="ei" class="ex">
                     {{ ex }}
                   </div>
                 </template>
                 <div class="states">
-                  <button :class="it.state === 'new' ? '' : 'ghost'" @click="setState(it, 'new')">
-                    未看
-                  </button>
-                  <button :class="it.state === 'seen' ? '' : 'ghost'" @click="setState(it, 'seen')">
-                    已看
-                  </button>
-                  <button :class="it.state === 'key' ? '' : 'ghost'" @click="setState(it, 'key')">
+                  <button
+                    :class="it.state === 'key' ? '' : 'ghost'"
+                    :disabled="it.collapsed"
+                    @click="toggleKey(it)"
+                  >
                     重点
                   </button>
-                  <button :class="it.state === 'known' ? '' : 'ghost'" @click="setState(it, 'known')">
-                    熟悉
-                  </button>
-                  <button class="ghost" @click="toggleCollapse(it)">
+                  <button class="ghost" @click="toggleItemCollapse(it)">
                     {{ it.collapsed ? '展开' : '收起' }}
                   </button>
                 </div>
@@ -252,27 +273,23 @@ function toggleCollapse(it) {
   border: none;
   pointer-events: none;
 }
-.show-known {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 16px;
-  color: var(--muted);
-  font-size: 14px;
-}
-.show-known input {
-  width: auto;
-}
 .point-title {
   cursor: pointer;
   font-weight: 600;
   font-size: 17px;
 }
-.pos {
+.point-title.hot {
+  color: var(--danger);
+}
+.setsuzoku {
+  cursor: pointer;
   color: var(--accent);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   margin: 12px 0 4px;
+}
+.setsuzoku.hot {
+  color: var(--danger);
 }
 .item {
   padding: 12px 0;
@@ -280,6 +297,11 @@ function toggleCollapse(it) {
 }
 .item:first-child {
   border-top: none;
+}
+.item.indent {
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+  margin-left: 2px;
 }
 .meaning {
   font-size: 16px;
@@ -290,16 +312,16 @@ function toggleCollapse(it) {
   filter: blur(5px);
   user-select: none;
 }
-.meaning.seen {
-  color: #ca8a04;
-  font-weight: 600;
-}
 .meaning.key {
   color: var(--danger);
   font-weight: 700;
 }
-.meaning.known {
+.nuance {
+  font-size: 14px;
   color: var(--muted);
+  margin: 6px 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 .ex {
   font-size: 15px;
@@ -309,12 +331,16 @@ function toggleCollapse(it) {
 }
 .states {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
   margin-top: 10px;
 }
 .states button {
   padding: 4px 14px;
   font-size: 13px;
+}
+.states button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 </style>

@@ -8,7 +8,7 @@ const TYPES = {
   reading: { table: 'reading_words', cols: 'id, kana, kanji, meanings', valCol: 'streak' },
   ono: { table: 'onomatopoeia', cols: 'id, body', valCol: 'score' },
 }
-const QUOTA = { kanji: [10, 10, 5], reading: [10, 10, 5], ono: [2, 2, 1] }
+const QUOTA = { kanji: [0, 0, 0], reading: [30, 20, 10], ono: [0, 0, 0] }
 
 async function fetchBucket(env, table, cols, where, limit) {
   const { results } = await env.DB.prepare(
@@ -98,3 +98,5 @@ export async function onRequestGet({ env }) {
   const questions = [...shuffle(regular), ...shuffle(review)]
   return Response.json({ resumed: false, questions })
 }
+
+

@@ -18,7 +18,7 @@ export async function onRequestGet({ env }) {
     for (const p of row.points) {
       for (const g of p.groups) {
         for (const it of g.items) {
-          it.key = itemKey(p.title, g.pos, it.meaning)
+          it.key = itemKey(p.title, g.setsuzoku, it.meaning)
           const m = stateMap[it.key]
           it.state = m ? m.state : 'new'
           it.collapsed = m ? m.collapsed : false
